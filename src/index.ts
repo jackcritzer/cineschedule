@@ -1,4 +1,5 @@
 import express from 'express';
+import { env } from './config/env.ts'
 import authRoutes from './routes/auth.ts';
 import healthRoutes from './routes/health.ts';
 
@@ -9,5 +10,8 @@ app.use(express.json());
 app.use('/auth', authRoutes);
 app.use('/health', healthRoutes);
 
-const PORT = Number(process.env.PORT ?? 3000);
-app.listen(PORT, () => console.log(`API listening on http://localhost:${PORT}`));
+app.listen(env.PORT, () => {
+  console.log(`API listening on :${env.PORT} (${env.NODE_ENV})`);
+});
+
+export default app;

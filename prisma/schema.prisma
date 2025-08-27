@@ -13,3 +13,27 @@ model User {
   password_hash String
   created_at    DateTime @default(now()) @db.Timestamptz(6)
 }
+
+model Title {
+  id           Int          @id @default(autoincrement())
+  tmdbId       Int          @unique
+  type         TitleType
+  name         String
+  releaseDate  DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  watchlistedBy Watchlist[]
+}
+
+model Watchlist {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  titleId   Int
+  createdAt DateTime @default(now())
+
+  user   User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title  Title @relation(fields: [titleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, titleId]) // prevent duplicates per user
+}
