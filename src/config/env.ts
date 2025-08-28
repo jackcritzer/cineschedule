@@ -11,7 +11,7 @@ const schema = z.object({
 
 const parsed = schema.safeParse(process.env);
 if (!parsed.success) {
-    console.error('Invalid environment configuration:', parsed.error.flatten().fieldErrors);
+    console.error('Invalid environment configuration:', z.treeifyError(parsed.error));
     process.exit(1);
 }
 
