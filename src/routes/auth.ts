@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { prisma } from '../db/client.ts';
-import { hashPassword, verifyPassword } from '../utils/hash.ts';
-import { signJwt } from '../utils/jwt.ts';
+import { prisma } from '../db/client';
+import { hashPassword, verifyPassword } from '../utils/hash';
+import { signJwt } from '../utils/jwt';
 
 const router = Router();
 
@@ -11,8 +11,8 @@ router.post('/register', async (req, res) => {
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
     try {
-        const password_hash = await hashPassword(password);
-        const user = await prisma.user.create({ data: { email, password_hash } });
+        const passwordHash = await hashPassword(password);
+        const user = await prisma.user.create({ data: { email, passwordHash } });
         const token = signJwt({ userId: user.id, email: user.email });
         res.json({ 
             token,
@@ -34,7 +34,7 @@ router.post('/login', async (req, res) => {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
-    const valid = await verifyPassword(password, user.password_hash);
+    const valid = await verifyPassword(password, user.passwordHash);
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
     const token = signJwt({ userId: user.id, email: user.email });

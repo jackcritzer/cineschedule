@@ -15,5 +15,20 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+  
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - db
+    env_file: .env         # <— loads your local .env (gitignored)
+    ports:
+      - "3000:3000"
+    command: ["npm", "run", "dev"] # or "start" for prod-like
+    volumes:
+      - .:/app
+      - /app/node_modules  # prevent host node_modules from shadowing
+      
 volumes:
   pgdata:

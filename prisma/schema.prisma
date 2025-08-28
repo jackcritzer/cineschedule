@@ -7,9 +7,43 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum TitleType {
+  MOVIE
+  TV
+}
+
 model User {
-  id            Int      @id @default(autoincrement())
-  email         String   @unique
-  password_hash String
-  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  id        Int       @id @default(autoincrement())
+  email     String    @unique
+  passwordHash  String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
+  watchlistItems Watchlist[]
+}
+
+model Title {
+  id          Int         @id @default(autoincrement())
+  tmdbId      Int
+  type        TitleType
+  name        String
+  releaseDate DateTime?
+  posterPath  String?
+  overview    String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  watchlist   Watchlist[]
+
+  @@unique([tmdbId, type])
+}
+
+model Watchlist {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  titleId   Int
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title Title @relation(fields: [titleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, titleId]) // a user can only add a title once
 }
