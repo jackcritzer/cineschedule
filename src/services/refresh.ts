@@ -1,10 +1,9 @@
-import { PrismaClient, ReleaseType, Prisma } from "@prisma/client";
+import { PrismaClient, ReleaseType } from "@prisma/client";
 import { getMovieReleaseDates, getTvDetails } from "../lib/tmdb";
 
 const prisma = new PrismaClient();
 
 type ReleaseTypeEnum = ReleaseType;
-
 
 // TMDB "type" codes -> our enum (course mapping)
 function mapTmdbReleaseType(typeNum: number): ReleaseTypeEnum {
