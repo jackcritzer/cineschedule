@@ -75,7 +75,9 @@ router.get("/calendar", requireAuth, async (req: any, res) => {
                     episodeId: ep.id,
                     season: ep.seasonNumber,
                     episode: ep.episodeNumber,
-                    name: ep.name
+                    name: ep.name,
+                    networks: (ep as any).title?.networksJson ?? [],
+                    whereToWatch: ((ep as any).title?.providersJson ?? []).slice(0, 4) // top 4 badges
                 }
             }))
         ].sort((a, b) => a.date.localeCompare(b.date));

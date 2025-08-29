@@ -31,6 +31,15 @@ model Title {
   overview     String?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
+
+  // (mostly used when type = TV)
+  networkName     String?   // e.g., HBO / Max (first network)
+  status          String?   // e.g., "Returning Series"
+  episodeRunTime  Int?      // typical minutes (from details.episode_run_time[0])
+  tvRating        String?   // e.g., "TV-14"
+  providersJson   Json?     // cached “where to watch” (US flatrate list)
+  networksJson    Json?
+
   watchlist    Watchlist[]
   ReleaseEvent ReleaseEvent[]
   Episode      Episode[]
@@ -89,6 +98,9 @@ model Episode {
   source        String   @default("TMDB")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  runtimeMin Int?        // per-episode runtime if TMDB has it
+  stillPath  String?     // episode still image path
 
   @@unique([titleId, seasonNumber, episodeNumber])
   @@index([airDate])
