@@ -1,13 +1,11 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: cineschedule-db
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: cineschedule
-    ports:
-      - "5432:5432"
+    ports: ["5432:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -15,20 +13,18 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
-  
+
   api:
     build:
       context: .
-      dockerfile: Dockerfile
-    depends_on:
-      - db
-    env_file: .env         # <— loads your local .env (gitignored)
-    ports:
-      - "3000:3000"
-    command: ["npm", "run", "dev"] # or "start" for prod-like
+      target: dev         # 👈 use the dev stage
+    env_file: .env
+    ports: ["3000:3000"]
+    depends_on: [db]
     volumes:
-      - .:/app
-      - /app/node_modules  # prevent host node_modules from shadowing
-      
+      - .:/app            # mount your code
+      - /app/node_modules # keep container's node_modules (don’t shadow with host)
+    command: npm run dev
+
 volumes:
   pgdata:
