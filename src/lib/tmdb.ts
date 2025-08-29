@@ -66,3 +66,36 @@ export async function searchTmdb(query: string, type: TmdbType, page = 1) {
         results
     }
 }
+
+function tmdbHeaders() {
+    const key = process.env.TMDB_API_KEY;
+    if(!key) throw new Error("TMDB_API_KEY not set");
+    return { Authorization: `Bearer ${key}`, "Content-Type": "application/json;charset=utf-8" };
+}
+
+// Movie: release dates
+export async function getMovieReleaseDates(tmdbId: number) {
+    const res = await fetch(`${TMDB_BASE}/movie/${tmdbId}/release_dates`, { headers: tmdbHeaders() });
+    if (!res.ok) throw new Error(`TMDB release_dates failed ${res.status}`);
+
+    return res.json() as Promise<{
+        id: number;
+        results: Array<{ iso_3166_1: string; release_dates: Array<{ release_date: string; type: number }> }>;
+    }>;
+}
+
+// TV: next episode to air (and details)
+export async function getTvDetails(tmdbId: number) {
+    const res = await fetch(`${TMDB_BASE}/tv/${tmdbId}`, { headers: tmdbHeaders() });
+    if (!res.ok) throw new Error(`TMDB details failed ${res.status}`);
+    return res.json() as Promise<{
+        id: number;
+        next_episode_to_air?: {
+            season_number: number;
+            episode_number: number;
+            name?: string;
+            air_date?: string; // "YYYY-MM-DD"
+            overview?: string;
+        }
+    }>;
+}

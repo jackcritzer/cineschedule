@@ -13,25 +13,27 @@ enum TitleType {
 }
 
 model User {
-  id        Int       @id @default(autoincrement())
-  email     String    @unique
-  passwordHash  String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @default(now()) @updatedAt
+  id             Int         @id @default(autoincrement())
+  email          String      @unique
+  passwordHash   String
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @default(now()) @updatedAt
   watchlistItems Watchlist[]
 }
 
 model Title {
-  id          Int         @id @default(autoincrement())
-  tmdbId      Int
-  type        TitleType
-  name        String
-  releaseDate DateTime?
-  posterPath  String?
-  overview    String?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  watchlist   Watchlist[]
+  id           Int            @id @default(autoincrement())
+  tmdbId       Int
+  type         TitleType
+  name         String
+  releaseDate  DateTime?
+  posterPath   String?
+  overview     String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  watchlist    Watchlist[]
+  ReleaseEvent ReleaseEvent[]
+  Episode      Episode[]
 
   @@unique([tmdbId, type])
 }
@@ -46,4 +48,49 @@ model Watchlist {
   title Title @relation(fields: [titleId], references: [id], onDelete: Cascade)
 
   @@unique([userId, titleId]) // a user can only add a title once
+  @@index([titleId])          // fast “who follows this title?”
+}
+
+/// Calendar models
+
+enum ReleaseType {
+  THEATRICAL
+  DIGITAL
+  STREAMING
+  PHYSICAL
+}
+
+model ReleaseEvent {
+  id        Int         @id @default(autoincrement())
+  titleId   Int
+  title     Title       @relation(fields: [titleId], references: [id], onDelete: Cascade)
+  date      DateTime
+  type      ReleaseType
+  country   String?     @db.VarChar(2) // ISO-3166-1 alpha-2 (e.g., "US")
+  source    String      @default("TMDB")
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@unique([titleId, date, type, country])
+  @@index([date])
+  @@index([titleId, date])
+}
+
+/// TV Episodes (future airings)
+model Episode {
+  id            Int      @id @default(autoincrement())
+  titleId       Int
+  title         Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
+  seasonNumber  Int
+  episodeNumber Int
+  name          String?
+  airDate       DateTime
+  overview      String?
+  source        String   @default("TMDB")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([titleId, seasonNumber, episodeNumber])
+  @@index([airDate])
+  @@index([titleId, airDate]) 
 }
