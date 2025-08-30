@@ -165,3 +165,42 @@ export async function getTvSeason(tmdbId: number, seasonNumber: number) {
 		`/tv/${tmdbId}/season/${seasonNumber}`, { language: "en-US" }
 	);
 }
+
+export type Provider = { id: number; name: string; logoPath? : string | null };
+type ProviderBuckets = {
+	flatrate?: Provider[],
+	free?: Provider[],
+	ads?: Provider[],
+	rent?: Provider[],
+	buy?: Provider[],
+}
+
+export function pickProviderBadges(results: Record<string, any> | null | undefined, region = "US", max = 4): Provider[] {
+	const r = results?.[region] ?? {};
+	const buckets: ProviderBuckets = {
+		flatrate: (r.flatrate ?? []).map(mapProv),
+		free: (r.free ?? []).map(mapProv),
+		ads: (r.ads ?? []).map(mapProv),
+		rent: (r.rent ?? []).map(mapProv),
+		buy: (r.buy ?? []).map(mapProv),
+	}
+
+	console.log(results)
+
+	// Prioritry: flatrate -> free -> ads -> rent -> buy
+	const prioritized = ["flatrate", "free", "ads", "rent", "buy"]
+		.flatMap(k => (buckets as any)[k] as Provider[])
+		.filter(Boolean);
+
+	const seen = new Set<number>;
+	const out: Provider[] = [];
+	for (const p of prioritized) {
+		if (!seen.has(p.id)) { out.push(p); seen.add(p.id); }
+		if (out.length >= max) break;
+	}
+	return out;
+
+	function mapProv(p: any): Provider {
+		return { id: p.provider_id, name: p.provider_name, logoPath: p.logo_path ?? null };
+	}
+}

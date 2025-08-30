@@ -1,4 +1,4 @@
-import { PrismaClient, ReleaseType } from "@prisma/client";
+import { PrismaClient, ReleaseType, TitleType } from "@prisma/client";
 import { getMovieReleaseDates, getTvDetails, getTvSeason, getTvContentRatings, getTvWatchProviders } from "../lib/tmdb";
 
 const prisma = new PrismaClient();
@@ -23,7 +23,6 @@ export async function refreshTitleData(titleId: number) {
     const title = await prisma.title.findUnique({ where: { id: titleId } });
     if (!title) throw new Error("Title not found");
     if (!title.tmdbId) throw new Error("Title missing tmdbId");
-
     if (title.type === "TV") return refreshTv(title.id, title.tmdbId);
 
     if (title.type === "MOVIE") {
@@ -64,6 +63,13 @@ export async function refreshTitleData(titleId: number) {
 }
 
 export async function refreshTv(titleId: number, tmdbId: number) {
+    const title = await prisma.title.findUnique({ where: { id: titleId }, select: { id: true, tmdbId: true, type: true, name: true } });
+    if (!title) throw new Error(`Title ${titleId} not found`);
+    if (title.type !== TitleType.TV) {
+        throw new Error(`Title ${titleId} is not TV (type=${title.type})`);
+    }
+    if (!title.tmdbId) throw new Error(`Title ${titleId} missing tmdbId`);
+    
     const details = await getTvDetails(tmdbId);
     const next = details.next_episode_to_air;
 
@@ -105,39 +111,48 @@ export async function refreshTv(titleId: number, tmdbId: number) {
     if (!next) return { kind: "TV", status: "no_upcoming_episode" };
 
     const season = await getTvSeason(tmdbId, next.season_number);
-    const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
+    const eps = Array.isArray(season.episodes) ? season.episodes : [];
+    const today = startOfTodayUTC();
 
-    const futures = (season.episodes ?? []).filter(ep => {
+    const futures = eps.filter(ep => {
         return (ep.air_date && new Date(ep.air_date + "T00:00:00Z") >= today);
     });
+
+    if (futures.length === 0) {
+        const announced = eps.filter(e => e.air_date).length;
+        return { kind: 'TV', upserted: 0, reason: `no_future_episodes (announced=${announced})`}
+    }
     
-    await Promise.all(futures.map(ep => {
-        prisma.episode.upsert({
-            where: {
-                titleId_seasonNumber_episodeNumber: {
-                    titleId,
+    const results = await prisma.$transaction(
+        futures.map(ep =>
+            prisma.episode.upsert({
+                where: {
+                    titleId_seasonNumber_episodeNumber: {
+                        titleId: title.id,
+                        seasonNumber: ep.season_number ?? next.season_number,
+                        episodeNumber: ep.episode_number!,
+                    },
+                },
+                create: {
+                    titleId: title.id,
                     seasonNumber: ep.season_number ?? next.season_number,
-                    episodeNumber: ep.episode_number
-                }
-            },
-            create: {
-                titleId,
-                seasonNumber: ep.season_number ?? next.season_number,
-                episodeNumber: ep.episode_number,
-                name: ep.name ?? null,
-                airDate: new Date(ep.air_date + "T00:00:00Z"),
-                overview: ep.overview ?? null,
-                runtimeMin: (ep as any).runtime ?? null,
-                stillPath: (ep as any).still_path ?? null
-            },
-            update: {
-                name: ep.name ?? null,
-                airDate: new Date(ep.air_date + "T00:00:00Z"),
-                overview: ep.overview ?? null,
-                runtimeMin: (ep as any).runtime ?? null,
-                stillPath: (ep as any).still_path ?? null
-            }
-        })
-    }))
-    return { kind: "TV", upserted: futures.length };
+                    episodeNumber: ep.episode_number!,
+                    name: ep.name ?? null,
+                    airDate: new Date(`${ep.air_date}T00:00:00Z`),
+                    overview: ep.overview ?? null,
+                    runtimeMin: (ep as any).runtime ?? null,
+                    stillPath: (ep as any).still_path ?? null,
+                    source: "TMDB",
+                },
+                update: {
+                    name: ep.name ?? null,
+                    airDate: new Date(`${ep.air_date}T00:00:00Z`),
+                    overview: ep.overview ?? null,
+                    runtimeMin: (ep as any).runtime ?? null,
+                    stillPath: (ep as any).still_path ?? null,
+                },
+            })
+        )
+    );
+    return { kind: "TV", upserted: results.length, season: next.season_number };
 } 
