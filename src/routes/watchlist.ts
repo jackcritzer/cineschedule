@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { requireAuth } from '../middleware/auth';
 import { fetchTmdbTitle } from '../lib/tmdb';
+import { refreshTv, refreshMovie } from '../services/refresh';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -12,6 +13,8 @@ const addByTmdbSchema = z.object({
     tmdbId: z.number().int().positive(),
     type: z.enum(['MOVIE', 'TV']),
 });
+
+const REFRESH_ON_ADD = (process.env.REFRESH_ON_ADD ?? "1") !== "0";
 
 router.post('/tmdb', requireAuth, asyncHandler(async (req: any, res) => {
     const userId = req.user?.userId as number | undefined;
@@ -27,17 +30,26 @@ router.post('/tmdb', requireAuth, asyncHandler(async (req: any, res) => {
         update: { name: data.name, releaseDate: data.releaseDate ?? null, posterPath: data.posterPath, overview: data.overview ?? null }
     });
 
-    const existing = await prisma.watchlist.findUnique({
-        where: { userId_titleId: { userId, titleId: title.id }},
-    });
-    if (existing) return res.status(200).json({ message: 'Already on watchlist' });
-
-    const added = await prisma.watchlist.create({
-        data: { userId, titleId: title.id },
-        include: { title: true },
+    const wl = await prisma.watchlist.upsert({
+        where: { userId_titleId: { userId, titleId: title.id } },
+        update: {},
+        create: { userId, titleId: title.id },
+        select: { userId: true, titleId: true },
     });
 
-    res.status(201).json(added);
+    // Refresh-on-add (synchronous)
+    let refresh: any = null;
+    if (REFRESH_ON_ADD) {
+        try {
+            if (title.type === TitleType.MOVIE) refresh = await refreshMovie(title.id);
+            else refresh = await refreshTv(title.id);
+        } catch (e: any) {
+            refresh = { ok: false, error: e?.message ?? "refresh failed" };
+            console.error("refresh-on-add failed:", e);
+        }
+    }
+
+    return res.json({ ok: true, titleId: title.id, watchlist: wl, refresh });
 }));
 
 // POST /watchlist/:titleId

@@ -23,10 +23,22 @@ export async function refreshTitleData(titleId: number) {
     const title = await prisma.title.findUnique({ where: { id: titleId } });
     if (!title) throw new Error("Title not found");
     if (!title.tmdbId) throw new Error("Title missing tmdbId");
-    if (title.type === "TV") return refreshTv(title.id, title.tmdbId);
+    
+    if (title.type === "TV") return refreshTv(title.id);
+    else if (title.type === "MOVIE") return refreshMovie(title.id);
 
-    if (title.type === "MOVIE") {
-        const payload = await getMovieReleaseDates(title.tmdbId);
+    return { kind: "unknown" };
+}
+
+export async function refreshMovie(titleId: number) {
+    const title = await prisma.title.findUnique({ where: { id: titleId }, select: { id: true, tmdbId: true, type: true, name: true } });
+    if (!title) throw new Error(`Title ${titleId} not found`);
+    if (title.type !== TitleType.TV) {
+        throw new Error(`Title ${titleId} is not TV (type=${title.type})`);
+    }
+    if (!title.tmdbId) throw new Error(`Title ${titleId} missing tmdbId`);
+
+    const payload = await getMovieReleaseDates(title.tmdbId);
         const upserts: Promise<any>[] = [];
         for (const countryBlock of payload.results ?? []) {
             const country = countryBlock.iso_3166_1;
@@ -57,12 +69,9 @@ export async function refreshTitleData(titleId: number) {
         }
         await Promise.all(upserts);
         return { kind: "MOVIE", insertedOrUpdated: upserts.length };
-    }
-
-    return { kind: "unknown" };
 }
 
-export async function refreshTv(titleId: number, tmdbId: number) {
+export async function refreshTv(titleId: number) {
     const title = await prisma.title.findUnique({ where: { id: titleId }, select: { id: true, tmdbId: true, type: true, name: true } });
     if (!title) throw new Error(`Title ${titleId} not found`);
     if (title.type !== TitleType.TV) {
@@ -70,7 +79,7 @@ export async function refreshTv(titleId: number, tmdbId: number) {
     }
     if (!title.tmdbId) throw new Error(`Title ${titleId} missing tmdbId`);
     
-    const details = await getTvDetails(tmdbId);
+    const details = await getTvDetails(title.tmdbId);
     const next = details.next_episode_to_air;
 
     // ----- enrich Title (network/status/runtime/rating/providers)
@@ -84,10 +93,10 @@ export async function refreshTv(titleId: number, tmdbId: number) {
         : null;
     const status = details.status ?? null;
 
-    const ratingsResp = await getTvContentRatings(tmdbId);
+    const ratingsResp = await getTvContentRatings(title.tmdbId);
     const usRating = ratingsResp.results?.find(r => r.iso_3166_1 === "US")?.rating ?? null;
 
-    const providersRep = await getTvWatchProviders(tmdbId);
+    const providersRep = await getTvWatchProviders(title.tmdbId);
     const us = providersRep.results?.US;
     const flatrate = Array.isArray(us?.flatrate) 
         ? us.flatrate.map((p: any) => ({
@@ -110,7 +119,7 @@ export async function refreshTv(titleId: number, tmdbId: number) {
     // ----- episodes: keep your “current season future episodes” approach
     if (!next) return { kind: "TV", status: "no_upcoming_episode" };
 
-    const season = await getTvSeason(tmdbId, next.season_number);
+    const season = await getTvSeason(title.tmdbId, next.season_number);
     const eps = Array.isArray(season.episodes) ? season.episodes : [];
     const today = startOfTodayUTC();
 
