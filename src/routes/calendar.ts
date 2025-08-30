@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { requireAuth } from '../middleware/auth';
+import { Provider, pickProviderBadges } from '../lib/tmdb'
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -29,7 +30,7 @@ router.get("/calendar", requireAuth, async (req: any, res) => {
         const titleIds = watchlist.map(w => w.titleId);
         if (titleIds.length === 0) return res.json({ items: [], nextCursor: null });
 
-        // Fetch upcoming per model
+        // Fetch upcoming items
         const [movieEvents, tvEpisodes] = await Promise.all([
             prisma.releaseEvent.findMany({
                 where: {
@@ -48,16 +49,25 @@ router.get("/calendar", requireAuth, async (req: any, res) => {
                     airDate: { gte: from, ...(to ? { lte: to }: {}) }
                 },
                 select: {
-                    id: true, titleId: true, seasonNumber: true, episodeNumber: true,
-                    name: true, airDate: true,
-                    title: { select: { name: true, type: true } }
+                    id: true, 
+                    titleId: true, 
+                    seasonNumber: true, 
+                    episodeNumber: true,
+                    name: true,
+                    airDate: true,
+                    runtimeMin: true,
+                    title: { 
+                        select: { 
+                            name: true, 
+                            networksJson: true,
+                            providersJson: true 
+                        } 
+                    }
                 }
             })
         ]);
 
-        // Merge into single feed (sorted by date)
-        const merged = [
-            ...movieEvents.map(ev => ({
+        const movieItems = movieEvents.map(ev => ({
                 kind: "movie" as const,
                 date: ev.date.toISOString(),
                 titleId: ev.titleId,
@@ -65,8 +75,15 @@ router.get("/calendar", requireAuth, async (req: any, res) => {
                 type: ev.type,
                 country: ev.country,
                 payload: { releaseEventId: ev.id },
-            })),
-            ...tvEpisodes.map(ep => ({
+            }));
+
+        const tvItems = tvEpisodes.map((ep) => {
+            const networksAll = (ep.title.networksJson as unknown as Provider[] | null) ?? [];
+            const providersRaw = ep.title.providersJson as unknown as Record<string, any> | null;
+            
+            const providers = pickProviderBadges(providersRaw, "US", 4);
+            
+            return {
                 kind: "episode" as const,
                 date: ep.airDate.toDateString(),
                 titleId: ep.titleId,
@@ -75,10 +92,14 @@ router.get("/calendar", requireAuth, async (req: any, res) => {
                     episodeId: ep.id,
                     season: ep.seasonNumber,
                     episode: ep.episodeNumber,
-                    name: ep.name
+                    name: ep.name,
+                    networks: networksAll.slice(0, 2),
+                    whereToWatch: providers // top 4 badges
                 }
-            }))
-        ].sort((a, b) => a.date.localeCompare(b.date));
+            }
+        });
+
+        const merged = [...movieItems, ...tvItems].sort((a, b) => a.date.localeCompare(b.date));
 
         res.json({ items: merged.slice(0, limit), nextCursor: null });
     } catch (err: any) {
