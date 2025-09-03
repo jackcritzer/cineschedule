@@ -1,4 +1,4 @@
-import { PrismaClient, ReleaseType, TitleType } from "@prisma/client";
+import { PrismaClient, ReleaseType, TitleType, Prisma } from "@prisma/client";
 import { getMovieReleaseDates, getTvDetails, getTvSeason, getTvContentRatings, getTvWatchProviders } from "../lib/tmdb";
 
 const prisma = new PrismaClient();
@@ -89,20 +89,15 @@ export async function refreshTv(titleId: number) {
     const networkName = networks[0]?.name ?? null;
 
     const episodeRunTime = Array.isArray(details.episode_run_time) && details.episode_run_time.length
-        ? details.episode_run_time[0]
+        ? Number(details.episode_run_time[0])
         : null;
     const status = details.status ?? null;
 
     const ratingsResp = await getTvContentRatings(title.tmdbId);
     const usRating = ratingsResp.results?.find(r => r.iso_3166_1 === "US")?.rating ?? null;
 
-    const providersRep = await getTvWatchProviders(title.tmdbId);
-    const us = providersRep.results?.US;
-    const flatrate = Array.isArray(us?.flatrate) 
-        ? us.flatrate.map((p: any) => ({
-                id: p.provider_id, name: p.provider_name, logoPath: p.logo_path
-            })) 
-        : [];
+    const providersResp = await getTvWatchProviders(title.tmdbId);
+    const providersResults = providersResp?.results ?? null;
 
     await prisma.title.update({
         where: { id: titleId },
@@ -111,8 +106,8 @@ export async function refreshTv(titleId: number) {
             status,
             episodeRunTime,
             tvRating: usRating,
-            providersJson: flatrate.length ? flatrate : null,
-            networksJson: flatrate.length ? networks : null
+            providersJson: providersResults ? (providersResults as Prisma.InputJsonValue) : Prisma.DbNull,
+            networksJson: networks.length ? (networks as Prisma.InputJsonValue) : Prisma.DbNull,
         }
     });
 
