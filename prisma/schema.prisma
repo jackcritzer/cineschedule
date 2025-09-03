@@ -32,6 +32,9 @@ model Title {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
+  // When our app successfully resfreshed TMDB data for this title
+  lastRefreshedAt DateTime?
+
   // (mostly used when type = TV)
   networkName     String?   // e.g., HBO / Max (first network)
   status          String?   // e.g., "Returning Series"

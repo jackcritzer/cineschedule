@@ -1,9 +1,11 @@
-import { PrismaClient, ReleaseType, TitleType, Prisma } from "@prisma/client";
+import { PrismaClient, ReleaseType, TitleType, Prisma, Title } from "@prisma/client";
 import { getMovieReleaseDates, getTvDetails, getTvSeason, getTvContentRatings, getTvWatchProviders } from "../lib/tmdb";
 
 const prisma = new PrismaClient();
 
 type ReleaseTypeEnum = ReleaseType;
+
+const REFRESH_ON_ADD = (process.env.REFRESH_ON_ADD ?? "1") !== "0";
 
 function startOfTodayUTC() {
   // Normalize to UTC midnight so comparisons are stable
@@ -30,7 +32,7 @@ export async function refreshTitleData(titleId: number) {
     return { kind: "unknown" };
 }
 
-export async function refreshMovie(titleId: number) {
+export async function refreshMovie(titleId: number):Promise<{ kind: TitleType; reason?: string; insertedOrUpdated?: number }> {
     const title = await prisma.title.findUnique({ where: { id: titleId }, select: { id: true, tmdbId: true, type: true, name: true } });
     if (!title) throw new Error(`Title ${titleId} not found`);
     if (title.type !== TitleType.TV) {
@@ -71,7 +73,7 @@ export async function refreshMovie(titleId: number) {
         return { kind: "MOVIE", insertedOrUpdated: upserts.length };
 }
 
-export async function refreshTv(titleId: number) {
+export async function refreshTv(titleId: number): Promise<{ kind: TitleType; reason?: string; status?: string; upserted?: number; season?: number; }> {
     const title = await prisma.title.findUnique({ where: { id: titleId }, select: { id: true, tmdbId: true, type: true, name: true } });
     if (!title) throw new Error(`Title ${titleId} not found`);
     if (title.type !== TitleType.TV) {
@@ -159,4 +161,29 @@ export async function refreshTv(titleId: number) {
         )
     );
     return { kind: "TV", upserted: results.length, season: next.season_number };
-} 
+}
+
+export async function refreshTitleOnAdd(title: Title) {
+    if (!REFRESH_ON_ADD) return;
+
+    const FRESH_MS = 24 * 60 * 60 * 1000; // 24h
+    const last = title.lastRefreshedAt ? new Date(title.lastRefreshedAt).getTime() : 0;
+    const isFresh = last > 0 && (Date.now() - last) < FRESH_MS;
+
+    let refresh: any = null;
+
+    if (!isFresh) {
+        try {
+            if (title.type === TitleType.MOVIE) refresh = await refreshMovie(title.id);
+            else refresh = await refreshTv(title.id);
+        } catch (e: any) {
+            refresh = { ok: false, error: e?.message ?? "refresh failed" };
+            console.error("refresh-on-add failed:", e);
+        }
+    }
+    else {
+        refresh = { ok: true, error: "Title refreshed within last 24h, no refresh needed" }
+    }
+
+    return refresh;
+}

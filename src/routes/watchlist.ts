@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { requireAuth } from '../middleware/auth';
 import { fetchTmdbTitle } from '../lib/tmdb';
-import { refreshTv, refreshMovie } from '../services/refresh';
+import { refreshMaybe } from '../services/refreshMaybe';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -37,17 +37,19 @@ router.post('/tmdb', requireAuth, asyncHandler(async (req: any, res) => {
         select: { userId: true, titleId: true },
     });
 
-    // Refresh-on-add (synchronous)
-    let refresh: any = null;
-    if (REFRESH_ON_ADD) {
-        try {
-            if (title.type === TitleType.MOVIE) refresh = await refreshMovie(title.id);
-            else refresh = await refreshTv(title.id);
-        } catch (e: any) {
-            refresh = { ok: false, error: e?.message ?? "refresh failed" };
-            console.error("refresh-on-add failed:", e);
+    const refresh = await refreshMaybe(
+        { 
+            id: title.id, 
+            type: title.type as any, 
+            name: title.name ?? null, 
+            lastRefreshedAt: title.lastRefreshedAt as any 
+        },
+        { 
+            enabled: process.env.REFRESH_ON_ADD === '1', 
+            minAgeMs: 24*60*60*1000, // 1 day
+            reason: 'on-add'
         }
-    }
+    );
 
     return res.json({ ok: true, titleId: title.id, watchlist: wl, refresh });
 }));

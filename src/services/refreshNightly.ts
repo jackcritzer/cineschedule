@@ -1,7 +1,8 @@
 import cron from 'node-cron';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, TitleType } from '@prisma/client';
 
 import { refreshMovie, refreshTv } from './refresh';
+import { refreshMaybe } from './refreshMaybe';
 
 const prisma = new PrismaClient();
 
@@ -80,7 +81,7 @@ async function getWatchlistedTitles(): Promise<TitleRow[]> {
 
     const titles = await prisma.title.findMany({
         where: { id: { in: titleIds } },
-        select: { id: true, type: true, name: true }
+        select: { id: true, type: true, name: true, lastRefreshedAt: true }
     });
 
     // Force type to 'MOVIE' | 'TV'
@@ -94,6 +95,8 @@ async function refreshOne(title: TitleRow): Promise<void> {
         await withRetry(() => refreshTv(title.id));
     }
 }
+
+
 
 async function runPool<T>(
     items: T[],
@@ -121,6 +124,31 @@ async function runPool<T>(
     await Promise.all(starters);
 }
 
+const NIGHTLY_MIN_FRESH_MS = Number(process.env.NIGHTLY_MIN_FRESH_MS ?? 86_400_000); // 24h default
+const NIGHTLY_UPCOMING_DAYS = Number(process.env.NIGHTLY_UPCOMING_DAYS ?? 0);       // 0 = disabled
+
+async function hasUpcomingWithin(titleId: number, type: TitleType, days: number) {
+    if (!days || days <= 0) return false;
+    const now = new Date();
+    const soon = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+    if (type === 'MOVIE') {
+        return !!(
+            await prisma.releaseEvent.findFirst({
+                where: { titleId, date: { gte: now, lte: soon } },
+                select: { id: true },
+            })
+        )
+    } else {
+        return !!(
+            await prisma.episode.findFirst({
+                where: { titleId, airDate: { gte: now, lte: soon } },
+                select: { id: true },
+            })
+        )
+    }
+}
+
 export type RefreshSummary = {
     startedAt: string;
     finishedAt: string;
@@ -131,7 +159,7 @@ export type RefreshSummary = {
     retried: number; // count of tasks that needed >=1 retry
     skipped: boolean;
     reason?: string;
-    details?: Array<{ id: number; type: 'MOVIE' | 'TV'; name: string | null; ok: boolean; attempts: number; error?: string }>;
+    details?: Array<{ id: number; type: 'MOVIE' | 'TV'; name: string | null; ok: boolean; attempts: number; error?: string | null }>;
 };
 
 export async function runNightlyRefresh(): Promise<RefreshSummary> {
@@ -179,22 +207,26 @@ export async function runNightlyRefresh(): Promise<RefreshSummary> {
         await runPool(
             titles,
             async (t) => {
-                let attempts = 0;
-                const doOne = async () => {
-                    attempts += 1;
-                    await refreshOne(t);
-                };
+                const forceNearAir = await hasUpcomingWithin(t.id, t.type, NIGHTLY_UPCOMING_DAYS);
+                const res = await refreshMaybe(t as any, {
+                    enabled: true,
+                    minAgeMs: NIGHTLY_MIN_FRESH_MS,
+                    force: forceNearAir,
+                    reason: forceNearAir ? 'nightly-near-air' : 'nightly',
+                });
 
-                try {
-                    await withRetry(doOne);
-                    ok += 1;
-                    if (attempts > 1) retried += 1;
-                    details?.push({ id: t.id, type: t.type, name: t.name, ok: true, attempts });
-                } catch (err: any) {
-                    failed += 1;
-                    const msg = err?.message || String(err);
-                    details?.push({ id: t.id, type: t.type, name: t.name, ok: false, attempts, error: msg });
-                }
+                if (!res.ok) failed += 1;
+                else if (!res.skipped) ok += 1;       // count only real refreshes as ok
+                else /* skipped */ ok += 1;           // or treat skip as ok; up to you
+
+                details?.push({
+                    id: t.id,
+                    type: t.type as any,
+                    name: t.name ?? null,
+                    ok: !!res.ok,
+                    attempts: 1,
+                    error: res.reason ?? null,
+                });
             },
             REFRESH_CONCURRENCY,
             (done, total) => {
