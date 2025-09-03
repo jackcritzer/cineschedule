@@ -7,6 +7,7 @@ import watchlistRoutes from './routes/watchlist';
 import tmdbRoutes from './routes/tmdb';
 import titlesRefreshRouter from './routes/titles.refresh';
 import calendarRouter from './routes/calendar';
+import { scheduleNightlyRefresh } from './services/refreshNightly';
 
 const app = express();
 app.use(express.json());
@@ -25,6 +26,9 @@ app.use(calendarRouter)
 
 app.listen(env.PORT, () => {
   console.log(`API listening on :${env.PORT} (${env.NODE_ENV})`);
+
+  // Start background cron (no-op if CRON_ENABLED != 1)
+  scheduleNightlyRefresh();
 });
 
 export default app;
