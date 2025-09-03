@@ -185,8 +185,6 @@ export function pickProviderBadges(results: Record<string, any> | null | undefin
 		buy: (r.buy ?? []).map(mapProv),
 	}
 
-	console.log(results)
-
 	// Prioritry: flatrate -> free -> ads -> rent -> buy
 	const prioritized = ["flatrate", "free", "ads", "rent", "buy"]
 		.flatMap(k => (buckets as any)[k] as Provider[])
