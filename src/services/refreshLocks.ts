@@ -4,7 +4,7 @@ const prisma = new PrismaClient();
 
 const LOCK_NS = 42_100;
 
-export async function withTitleLock<T>(titleId: number, fn: () => Promise<
+export async function withTitleLock(titleId: number, fn: () => Promise<
         {
             kind: string; insertedOrUpdated: number // refreshMovie output
         } | 

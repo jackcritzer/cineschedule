@@ -1,7 +1,6 @@
 import cron from 'node-cron';
 import { PrismaClient, TitleType } from '@prisma/client';
 
-import { refreshMovie, refreshTv } from './refresh';
 import { refreshMaybe } from './refreshMaybe';
 
 const prisma = new PrismaClient();
@@ -15,12 +14,12 @@ const REFRESH_CONCURRENCY = Number(process.env.REFRESH_CONCURRENCY || 5);
 const LOCK_K1 = 42142;
 const LOCK_K2 = 91717;
 
-// Retry policy
+type TitleRow = { id: number; type: 'MOVIE' | 'TV'; name: string | null };
+
+/* // Retry policy
 const MAX_RETRIES = 4;              // total attempts = 1 + MAX_RETRIES
 const BASE_BACKOFF_MS = 500;        // initial backoff before jitter/exponent
 const MAX_BACKOFF_MS = 30_000;
-
-type TitleRow = { id: number; type: 'MOVIE' | 'TV'; name: string | null };
 
 function sleep(ms: number) {
     return new Promise((res) => setTimeout(res, ms));
@@ -55,7 +54,7 @@ async function withRetry<T>(fn: () => Promise<T>) {
             attempt += 1;
         }
     }
-}
+} */
 
 async function tryAcquireLock(): Promise<boolean> {
     const rows = await prisma.$queryRaw<{ acquired: boolean }[]>`
@@ -87,15 +86,6 @@ async function getWatchlistedTitles(): Promise<TitleRow[]> {
     // Force type to 'MOVIE' | 'TV'
     return titles.map(t => ({ id: t.id, type: (t.type as any) as 'MOVIE' | 'TV', name: t.name }));
 }
-
-async function refreshOne(title: TitleRow): Promise<void> {
-    if (title.type === 'MOVIE') {
-        await withRetry(() => refreshMovie(title.id));
-    } else {
-        await withRetry(() => refreshTv(title.id));
-    }
-}
-
 
 
 async function runPool<T>(
@@ -183,7 +173,7 @@ export async function runNightlyRefresh(): Promise<RefreshSummary> {
     }
 
     const details: RefreshSummary['details'] = [];
-    let retried = 0;
+    const retried = 0;
 
     try {
         const titles = await getWatchlistedTitles();

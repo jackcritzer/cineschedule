@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { PrismaClient, TitleType } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { requireAuth } from '../middleware/auth';
@@ -13,8 +13,6 @@ const addByTmdbSchema = z.object({
     tmdbId: z.number().int().positive(),
     type: z.enum(['MOVIE', 'TV']),
 });
-
-const REFRESH_ON_ADD = (process.env.REFRESH_ON_ADD ?? "1") !== "0";
 
 router.post('/tmdb', requireAuth, asyncHandler(async (req: any, res) => {
     const userId = req.user?.userId as number | undefined;
