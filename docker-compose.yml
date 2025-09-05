@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   db:
     image: postgres:16-alpine
@@ -5,25 +7,29 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: cineschedule
-    ports: ["5432:5432"]
+    ports:
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d cineschedule"]
       interval: 5s
       timeout: 3s
-      retries: 20
+      retries: 5
 
   api:
     build:
       context: .
-      target: dev         # 👈 use the dev stage
+      target: dev            # 👈 keep using the dev stage
     env_file: .env
-    ports: ["3000:3000"]
-    depends_on: [db]
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
     volumes:
-      - .:/app            # mount your code
-      - /app/node_modules # keep container's node_modules (don’t shadow with host)
+      - .:/app               # mount source code
+      - /app/node_modules    # keep container's node_modules
     command: npm run dev
 
 volumes:

@@ -1,0 +1,21 @@
+# node / build
+node_modules
+npm-debug.log*
+yarn.lock
+pnpm-lock.yaml
+dist
+coverage
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# vcs / ci
+.git
+.github
+
+# misc
+.DS_Store
+*.swp
+*.local
