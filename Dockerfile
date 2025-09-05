@@ -14,14 +14,12 @@ ENV NODE_ENV=development
 COPY package*.json ./
 RUN npm ci
 
-# ---- dev stage (keep your hot reload DX) ----
+# ---- dev stage (hot reload for local DX) ----
 FROM deps AS dev
 WORKDIR /app
 COPY . .
-# Expose for local dev
 ENV PORT=3000
 EXPOSE 3000
-# Uses your local node_modules in-container (compose will mount /app and keep /app/node_modules intact)
 CMD ["npm", "run", "dev"]
 
 # ---- build (compile TS, generate Prisma) ----
@@ -37,19 +35,22 @@ RUN npm run build
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-RUN apk add --no-cache openssl ca-certificates wget && \
-    addgroup -S nodejs && adduser -S node -G nodejs
-USER node
 
-# Copy only what we need
-COPY --chown=node:node package*.json ./
+# Install needed tools while root
+RUN apk add --no-cache openssl ca-certificates wget
+
+# Copy manifests and install prod deps as root
+COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-# Bring compiled app & prisma artifacts from builder
+# Bring compiled app & prisma artifacts; set ownership to 'node'
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/prisma ./prisma
 COPY --from=builder --chown=node:node /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=node:node /app/node_modules/@prisma ./node_modules/@prisma
+
+# Drop privileges for runtime
+USER node
 
 # Health + port (Render sets PORT; default to 3000)
 ENV PORT=3000
