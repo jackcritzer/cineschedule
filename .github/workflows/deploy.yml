@@ -62,24 +62,11 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npx prisma migrate deploy --schema=./prisma/schema.prisma
 
-      # ---- Trigger Render deploy ----
-      - name: Trigger Render deploy (image service)
-        env:
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
-        run: |
-          set -euo pipefail
-          HTTP_CODE=$(curl -sS -o /tmp/render_resp.json -w "%{http_code}" \
-            -X POST "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
-            -H "Authorization: Bearer ${RENDER_API_KEY}" \
-            --json '{"clearCache":false}')
-          echo "Render responded with HTTP $HTTP_CODE"
-          cat /tmp/render_resp.json
-          if [ "${HTTP_CODE}" -lt 200 ] || [ "${HTTP_CODE}" -ge 300 ]; then
-            echo "Render deploy API failed"
-            exit 1
-          fi
-
+      - name: Render Deploy Action
+        uses: johnbeynon/render-deploy-action@v0.0.8
+        with:
+            service-id: ${{ secrets.RENDER_SERVICE_ID }}
+            api-key: ${{ secrets.RENDER_API_KEY }}
 
       # ---- (Optional) Verify status (best-effort) ----
       - name: Print Render deploy note
