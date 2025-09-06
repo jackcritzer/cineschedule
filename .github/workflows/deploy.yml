@@ -73,26 +73,22 @@ jobs:
           IMAGE_SHA_TAG="ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA::7}"
           echo "Triggering Render with image: $IMAGE_SHA_TAG"
 
-          # Build JSON payload safely (no escaping headaches)
-          read -r -d '' JSON_PAYLOAD <<EOF
-          {"clearCache":false,"imageUrl":"$IMAGE_SHA_TAG"}
-          EOF
+          JSON_PAYLOAD=$(printf '{"clearCache":false,"imageUrl":"%s"}' "$IMAGE_SHA_TAG")
 
-          # Call Render and capture status + body for debugging
           HTTP_CODE=$(curl -sS -o /tmp/render_resp.json -w "%{http_code}" \
             -X POST "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
             -H "Authorization: Bearer ${RENDER_API_KEY}" \
             -H "Content-Type: application/json" \
-            --data-raw "$JSON_PAYLOAD")
+            --data "$JSON_PAYLOAD")
 
           echo "Render responded with HTTP $HTTP_CODE"
           cat /tmp/render_resp.json
 
-          # Fail the job if not 2xx
           if [ "${HTTP_CODE}" -lt 200 ] || [ "${HTTP_CODE}" -ge 300 ]; then
             echo "Render deploy API failed"
             exit 1
           fi
+
 
       # ---- (Optional) Verify status (best-effort) ----
       - name: Print Render deploy note
