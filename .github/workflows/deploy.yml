@@ -63,15 +63,20 @@ jobs:
         run: npx prisma migrate deploy --schema=./prisma/schema.prisma
 
       # ---- Trigger Render deploy ----
-      - name: Trigger Render deploy
+      - name: Trigger Render deploy (image service)
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
         run: |
-          curl -fsSL -X POST "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
+          set -e
+          IMAGE_SHA_TAG="ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA::7}"
+          echo "Triggering Render with image: $IMAGE_SHA_TAG"
+          curl -sS -X POST "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
             -H "Authorization: Bearer ${RENDER_API_KEY}" \
             -H "Content-Type: application/json" \
-            -d '{"clearCache":false}'
+            -d "{\"clearCache\":false,\"imageUrl\":\"$IMAGE_SHA_TAG\"}" \
+            | tee /dev/stderr
+
 
       # ---- (Optional) Verify status (best-effort) ----
       - name: Print Render deploy note
