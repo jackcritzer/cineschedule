@@ -13,7 +13,7 @@ router.post('/register', async (req, res) => {
     try {
         const passwordHash = await hashPassword(password);
         const user = await prisma.user.create({ data: { email, passwordHash } });
-        const token = signJwt({ userId: user.id, email: user.email });
+        const token = signJwt({ sub: user.id });
         res.json({ 
             token,
             user: { id: user.id, email: user.email }
@@ -37,7 +37,7 @@ router.post('/login', async (req, res) => {
     const valid = await verifyPassword(password, user.passwordHash);
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
-    const token = signJwt({ userId: user.id, email: user.email });
+    const token = signJwt({ sub: user.id });
     res.json({ token });
 });
 
