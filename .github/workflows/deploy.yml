@@ -31,10 +31,27 @@ jobs:
       name: production
       url: https://api.cineschedule.com
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Optional but recommended: use your repo's Prisma version
+      - name: Install deps (for Prisma CLI version pin)
+        run: npm ci
+
+      # (Optional) Sanity: show prisma folder exists
+      - name: List prisma dir
+        run: ls -la prisma
+
       - name: Run Prisma migrate on PROD
         env:
-            DATABASE_URL: ${{ secrets.DATABASE_URL }}   # env secret in “production”
-            PRISMA_HIDE_UPDATE_MESSAGE: "1"
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}     # env secret in "production"
+          PRISMA_HIDE_UPDATE_MESSAGE: "1"
         run: npx prisma migrate deploy --schema=./prisma/schema.prisma
 
   deploy_to_render:
