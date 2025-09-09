@@ -1,28 +1,20 @@
 import express from 'express';
 import { env } from './config/env'
-import authRoutes from './routes/auth';
-import healthRoutes from './routes/health';
-import titlesRoutes from './routes/titles';
-import watchlistRoutes from './routes/watchlist';
-import tmdbRoutes from './routes/tmdb';
-import titlesRefreshRouter from './routes/titles.refresh';
-import calendarRouter from './routes/calendar';
 import { scheduleNightlyRefresh } from './services/refreshNightly';
+import helmet from 'helmet';
+import v1 from './routes/v1'
+import { requestId } from './middleware/requestId';
+import { apiVersion } from './middleware/apiVersion';
 
 const app = express();
 app.use(express.json());
 
-// Routes
-app.use('/auth', authRoutes);
-app.use('/health', healthRoutes);
+app.use(helmet());
+app.use(express.json({ limit: '1mb' }));
+app.use(requestId());
+app.use(apiVersion('v1'));
 
-app.use('/titles', titlesRoutes);
-app.use(titlesRefreshRouter);
-
-app.use('/watchlist', watchlistRoutes);
-app.use('/tmdb', tmdbRoutes);
-
-app.use(calendarRouter)
+app.use('/v1', v1);
 
 app.listen(env.PORT, () => {
   console.log(`API listening on :${env.PORT} (${env.NODE_ENV})`);
