@@ -14,6 +14,29 @@ const addByTmdbSchema = z.object({
     type: z.enum(['MOVIE', 'TV']),
 });
 
+router.get('/', requireAuth, asyncHandler(async (req: any, res) => {
+    const userId = req.user?.userId as number | undefined;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '20')), 1), 100);
+    const cursor = req.query.cursor ? Number(req.query.cursor) : undefined;
+
+    const items = await prisma.watchlist.findMany({
+        where: { userId },
+        take: limit,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+        orderBy: { id: 'asc' },
+        include: { title: true },
+    });
+
+    const l = items.length;
+    const lastItem = items[l - 1];
+    if (!lastItem) return res.status(400).json({ error: 'Error fetching watchlist'});
+
+    const nextCursor = l === limit ? lastItem.id : null
+    res.json({ items, nextCursor });
+}));
+
 router.post('/tmdb', requireAuth, asyncHandler(async (req: any, res) => {
     const userId = req.user?.userId as number | undefined;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -70,29 +93,6 @@ router.post('/:titleId', requireAuth, asyncHandler(async (req: any, res) => {
         include: { title: true },
     });
     res.status(201).json(added);
-}));
-
-router.get('/', requireAuth, asyncHandler(async (req: any, res) => {
-    const userId = req.user?.userId as number | undefined;
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
-    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '20')), 1), 100);
-    const cursor = req.query.cursor ? Number(req.query.cursor) : undefined;
-
-    const items = await prisma.watchlist.findMany({
-        where: { userId },
-        take: limit,
-        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
-        orderBy: { id: 'asc' },
-        include: { title: true },
-    });
-
-    const l = items.length;
-    const lastItem = items[l - 1];
-    if (!lastItem) return res.status(400).json({ error: 'Error fetching watchlist'});
-
-    const nextCursor = l === limit ? lastItem.id : null
-    res.json({ items, nextCursor });
 }));
 
 export default router;

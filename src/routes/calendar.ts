@@ -10,7 +10,7 @@ const router = Router();
  * GET /calendar?from=YYYY-MM-DD&to=YYYY-MM-DD&limit=50
  * Returns upcoming releases/episodes for titles in the user's watchlist, merged chronologically.
  */
-router.get("/calendar", requireAuth, async (req: any, res) => {
+router.get('/', requireAuth, async (req: any, res) => {
     try {
         const userId: number = req.user.id;
         

@@ -4,7 +4,7 @@ import { requireAuth } from "../middleware/auth";
 
 const router = Router();
 
-router.post("/titles/:id/refresh", requireAuth, async (req, res) => {
+router.post("/:id/refresh", requireAuth, async (req, res) => {
     try {
         const id = Number(req.params.id);
         if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid id" });

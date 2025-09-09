@@ -14,8 +14,8 @@ v1.use('/health', healthRoutes);
 v1.use('/auth', authRoutes);
 v1.use('/tmdb', tmdbRoutes);
 v1.use('/titles', titlesRoutes);
-v1.use(titlesRefreshRouter);
+v1.use('/titles', titlesRefreshRouter);
 v1.use('/watchlist', watchlistRoutes);
-v1.use(calendarRouter)
+v1.use('/calendar', calendarRouter)
 
 export default v1;
