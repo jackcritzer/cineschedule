@@ -1,4 +1,5 @@
-name: Deploy API to Render
+name: Deploy API to Render (pinned image tag)
+
 on:
   push:
     branches: [ main ]
@@ -7,20 +8,43 @@ on:
 jobs:
   build_and_push_image:
     runs-on: ubuntu-latest
-    permissions: { contents: read, packages: write }
+    permissions:
+      contents: read
+      packages: write            # push to GHCR
     outputs:
       image_sha_tag: ${{ steps.meta.outputs.image_sha_tag }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Optional preflight (keeps prisma version pinned, catches obvious issues)
+      - name: Use Node 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install (dev) & prisma generate
+        run: |
+          npm ci
+          npx prisma generate
+        env:
+          PRISMA_HIDE_UPDATE_MESSAGE: "1"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
       - name: Build image
         id: meta
         run: |
-          IMAGE_SHA_TAG="ghcr.io/${{ github.repository }}:sha-${GITHUB_SHA::7}"
+          SHORT_SHA=${GITHUB_SHA::7}
+          IMAGE_SHA_TAG="ghcr.io/${{ github.repository }}:sha-${SHORT_SHA}"
           echo "image_sha_tag=$IMAGE_SHA_TAG" >> $GITHUB_OUTPUT
           docker build -t "$IMAGE_SHA_TAG" .
+
       - name: Push image
         run: docker push "${{ steps.meta.outputs.image_sha_tag }}"
 
@@ -28,10 +52,10 @@ jobs:
     needs: build_and_push_image
     runs-on: ubuntu-latest
     environment:
-      name: production
+      name: production           # create "production" env in GitHub → add Required reviewers + DATABASE_URL
       url: https://api.cineschedule.com
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Use Node 20.x
@@ -40,17 +64,14 @@ jobs:
           node-version: 20
           cache: npm
 
-      # Optional but recommended: use your repo's Prisma version
-      - name: Install deps (for Prisma CLI version pin)
+      - name: Install (dev) to pin Prisma CLI version
         run: npm ci
-
-      # (Optional) Sanity: show prisma folder exists
-      - name: List prisma dir
-        run: ls -la prisma
+        env:
+          PRISMA_HIDE_UPDATE_MESSAGE: "1"
 
       - name: Run Prisma migrate on PROD
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}     # env secret in "production"
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}   # put this secret in the "production" environment
           PRISMA_HIDE_UPDATE_MESSAGE: "1"
         run: npx prisma migrate deploy --schema=./prisma/schema.prisma
 
@@ -58,16 +79,29 @@ jobs:
     needs: [build_and_push_image, migrate_prod]
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Render deploy with this image
+      - name: Trigger Render deploy with pinned imageUrl
         env:
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}     # repo secret
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }} # repo secret
           IMAGE_SHA_TAG: ${{ needs.build_and_push_image.outputs.image_sha_tag }}
         run: |
-          JSON_PAYLOAD=$(printf '{"clearCache":false,"imageUrl":"%s"}' "$IMAGE_SHA_TAG")
-          curl -fsSL -X POST \
+          JSON_PAYLOAD=$(printf '{"imageUrl":"%s"}' "$IMAGE_SHA_TAG")
+          echo "Deploying image: $IMAGE_SHA_TAG"
+          set -o pipefail
+          curl -sS -D >(tee /tmp/render-headers.txt) \
             -H "Accept: application/json" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $RENDER_API_KEY" \
             -d "$JSON_PAYLOAD" \
-            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys"
+            -o /tmp/render-body.json \
+            -w "\nHTTP_STATUS=%{http_code}\n" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" | tee /tmp/render-status.txt
+          echo "--- Render response body ---"
+          cat /tmp/render-body.json
+          echo "--- Render response status ---"
+          grep HTTP_STATUS /tmp/render-status.txt | sed 's/HTTP_STATUS=//'
+          STATUS=$(grep HTTP_STATUS /tmp/render-status.txt | sed 's/HTTP_STATUS=//')
+          if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 300 ]; then
+            echo "Render deploy failed with status $STATUS"
+            exit 1
+          fi
