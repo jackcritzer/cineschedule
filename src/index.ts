@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import { env } from './config/env'
 import { scheduleNightlyRefresh } from './services/refreshNightly';
 import helmet from 'helmet';
@@ -7,12 +8,14 @@ import { requestId } from './middleware/requestId';
 import { apiVersion } from './middleware/apiVersion';
 
 const app = express();
-app.use(express.json());
+
+app.get('/v1/health', (_req, res) => res.json({ ok: true, via: 'app.ts' }));
 
 app.use(helmet());
 app.use(express.json({ limit: '1mb' }));
 app.use(requestId());
 app.use(apiVersion('v1'));
+app.use(cors(/* ... */));
 
 app.use('/v1', v1);
 
