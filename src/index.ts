@@ -9,25 +9,45 @@ import { apiVersion } from './middleware/apiVersion';
 
 const app = express();
 
-//app.get('/v1/health', (_req, res) => res.json({ ok: true, via: 'app.ts' }));
-
 app.use(helmet());
 app.use(express.json({ limit: '1mb' }));
 app.use(requestId());
 app.use(apiVersion('v1'));
-app.use(cors(/* ... */));
+
+const allowedOrigins = [
+    'https://app.cineschedule.com',
+    /\.vercel\.app$/,            // allow Vercel preview builds
+    'http://localhost:3000',
+];
+
+app.use(cors({
+	origin: (origin, callback) => {
+		if (!origin) return callback(null, true);
+		if (allowedOrigins.some(o => {
+			if (typeof o === 'string') return o === origin;
+			return o.test(origin); // regex test
+		})) {
+			return callback(null, true);
+		}
+		return callback(new Error(`Origin ${origin} not allowed by CORS`));
+	},
+	methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+	allowedHeaders: ['Authorization', 'Content-Type'],
+	maxAge: 600,
+	credentials: false
+}));
 
 app.use('/v1', v1);
 
 app.use((req, res) => {
-  res.status(404).json({ error: { code: 'RESOURCE_NOT_FOUND', message: 'Not found', requestId: (req as any).requestId } });
+  	res.status(404).json({ error: { code: 'RESOURCE_NOT_FOUND', message: 'Not found', requestId: (req as any).requestId } });
 });
 
 app.listen(env.PORT, () => {
-  console.log(`API listening on :${env.PORT} (${env.NODE_ENV})`);
+  	console.log(`API listening on :${env.PORT} (${env.NODE_ENV})`);
 
-  // Start background cron (no-op if CRON_ENABLED != 1)
-  scheduleNightlyRefresh();
+  	// Start background cron (no-op if CRON_ENABLED != 1)
+  	scheduleNightlyRefresh();
 });
 
 export default app;
