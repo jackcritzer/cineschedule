@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import v1 from './routes/v1'
 import { requestId } from './middleware/requestId';
 import { apiVersion } from './middleware/apiVersion';
+import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
 
@@ -39,9 +40,7 @@ app.use(cors({
 
 app.use('/v1', v1);
 
-app.use((req, res) => {
-  	res.status(404).json({ error: { code: 'RESOURCE_NOT_FOUND', message: 'Not found', requestId: (req as any).requestId } });
-});
+app.use(errorHandler());
 
 app.listen(env.PORT, () => {
   	console.log(`API listening on :${env.PORT} (${env.NODE_ENV})`);

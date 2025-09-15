@@ -11,11 +11,17 @@ function v4Token(): string {
 }
 
 // For GETs (most TMDB endpoints you use)
+/**
+ *
+ */
 export function authHeaders() {
   	return { Authorization: `Bearer ${v4Token()}`, Accept: "application/json" };
 }
 
 // For POST/PATCH with JSON bodies
+/**
+ *
+ */
 export function jsonHeaders() {
 	return {
 		Authorization: `Bearer ${v4Token()}`,
@@ -45,6 +51,9 @@ async function tmdbGet<T>(path: string, params?: Record<string, any>): Promise<T
   	return res.json() as Promise<T>;
 }
 
+/**
+ *
+ */
 export async function getMovieReleaseDates(tmdbId: number) {
   	return tmdbGet<{ 
             id: number; 
@@ -71,18 +80,27 @@ export type TvDetailsResponse = {
 	};
 };
 
+/**
+ *
+ */
 export async function getTvDetails(tmdbId: number) {
-  return tmdbGet<TvDetailsResponse>(`/tv/${tmdbId}`, { language: "en-US" });
+  	return tmdbGet<TvDetailsResponse>(`/tv/${tmdbId}`, { language: "en-US" });
 }
 
+/**
+ *
+ */
 export async function getTvContentRatings(tmdbId: number) {
-  return tmdbGet<{ 
+  	return tmdbGet<{ 
         	results: Array<{ iso_3166_1: string; rating: string }> 
 		}>(
 			`/tv/${tmdbId}/content_ratings`
   		)
 }
 
+/**
+ *
+ */
 export async function getTvWatchProviders(tmdbId: number) {
   	// results.{ISO}.flatrate[]|rent[]|buy[] (provider_name, logo_path, provider_id)
 	return tmdbGet<{ 
@@ -94,26 +112,32 @@ export async function getTvWatchProviders(tmdbId: number) {
 
 export type TmdbType = 'MOVIE' | 'TV';
 
+/**
+ *
+ */
 export async function fetchTmdbTitle(tmdbId: number, type: TmdbType) {
-  const path = type === "MOVIE" ? `/movie/${tmdbId}` : `/tv/${tmdbId}`;
+	const path = type === "MOVIE" ? `/movie/${tmdbId}` : `/tv/${tmdbId}`;
 
-  // Keep your original params/locale behavior
-  const json: any = await tmdbGet(path, { language: "en-US" });
+	// Keep your original params/locale behavior
+	const json: any = await tmdbGet(path, { language: "en-US" });
 
-  const name = type === "MOVIE" ? json.title : json.name;
-  const dateStr = type === "MOVIE" ? json.release_date : json.first_air_date;
-  const releaseDate = dateStr ? new Date(dateStr) : undefined;
+	const name = type === "MOVIE" ? json.title : json.name;
+	const dateStr = type === "MOVIE" ? json.release_date : json.first_air_date;
+	const releaseDate = dateStr ? new Date(dateStr) : undefined;
 
-  return {
-    tmdbId,
-    type,
-    name,
-    releaseDate,
-    posterPath: json.poster_path ?? null,
-    overview: json.overview ?? null,
+	return {
+		tmdbId,
+		type,
+		name,
+		releaseDate,
+		posterPath: json.poster_path ?? null,
+		overview: json.overview ?? null,
   };
 }
 
+/**
+ *
+ */
 export async function searchTmdb(query: string, type: TmdbType, page = 1) {
     const endpoint = type === "MOVIE" ? "/search/movie" : "/search/tv";
 
@@ -148,6 +172,9 @@ export async function searchTmdb(query: string, type: TmdbType, page = 1) {
   };
 }
 
+/**
+ *
+ */
 export async function getTvSeason(tmdbId: number, seasonNumber: number) {
 	return tmdbGet<{
 		_id: string;
@@ -175,6 +202,9 @@ type ProviderBuckets = {
 	buy?: Provider[],
 }
 
+/**
+ *
+ */
 export function pickProviderBadges(results: Record<string, any> | null | undefined, region = "US", max = 4): Provider[] {
 	const r = results?.[region] ?? {};
 	const buckets: ProviderBuckets = {
