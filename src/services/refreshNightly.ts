@@ -16,46 +16,6 @@ const LOCK_K2 = 91717;
 
 type TitleRow = { id: number; type: 'MOVIE' | 'TV'; name: string | null };
 
-/* // Retry policy
-const MAX_RETRIES = 4;              // total attempts = 1 + MAX_RETRIES
-const BASE_BACKOFF_MS = 500;        // initial backoff before jitter/exponent
-const MAX_BACKOFF_MS = 30_000;
-
-function sleep(ms: number) {
-    return new Promise((res) => setTimeout(res, ms));
-}
-
-function backOffDelay(attempt: number) {
-    const exp = Math.min(MAX_BACKOFF_MS, BASE_BACKOFF_MS * Math.pow(2, attempt - 1));
-    const jitter = Math.floor(Math.random() * 250);
-    return Math.min(MAX_BACKOFF_MS, exp + jitter);
-}
-
-function isTransient(err: any): boolean {
-    const status = err?.status ?? err?.response?.status;
-    if (typeof status === 'number') {
-        if (status === 429) return true;
-        if (status >= 500) return true;
-    }
-    const code = err?.code;
-    if (code && ['ETIMEOUT', 'ECONNRESET', 'EAI_AGAIN', 'ECONNABORTED'].includes(code)) return true;
-    return false;
-}
-
-async function withRetry<T>(fn: () => Promise<T>) {
-    let attempt = 1;
-    for (;;) {
-        try {
-            return await fn();
-        } catch (err: any) {
-            if (attempt > MAX_RETRIES || !isTransient(err)) throw err;
-            const delay = backOffDelay(attempt);
-            await sleep(delay);
-            attempt += 1;
-        }
-    }
-} */
-
 async function tryAcquireLock(): Promise<boolean> {
     const rows = await prisma.$queryRaw<{ acquired: boolean }[]>`
         SELECT pg_try_advisory_lock(${LOCK_K1}::int, ${LOCK_K2}::int) AS acquired    
@@ -152,6 +112,9 @@ export type RefreshSummary = {
     details?: Array<{ id: number; type: 'MOVIE' | 'TV'; name: string | null; ok: boolean; attempts: number; error?: string | null }>;
 };
 
+/**
+ *
+ */
 export async function runNightlyRefresh(): Promise<RefreshSummary> {
     const started = Date.now();
     const startedAt = new Date(started).toISOString();
@@ -244,6 +207,9 @@ export async function runNightlyRefresh(): Promise<RefreshSummary> {
 }
 
 // Schedule on process start (called from server entry)
+/**
+ *
+ */
 export function scheduleNightlyRefresh() {
     if (!CRON_ENABLED) {
         console.log('[refreshNightly] CRON_ENABLED!=1; scheduler disabled.');
@@ -281,8 +247,6 @@ export function scheduleNightlyRefresh() {
 
     console.log(`[refreshNightly] Scheduled: "${CRON_SCHEDULE}" TZ="${CRON_TZ}"`);
 }
-
-
 
 // CLI: run once with `--once`
 if (process.argv.includes('--once')) {

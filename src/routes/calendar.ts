@@ -1,25 +1,74 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { z } from 'zod';
+
+import { prisma } from '../db/client';
 import { requireAuth } from '../middleware/auth';
 import { Provider, pickProviderBadges } from '../lib/tmdb'
+import { asyncHandler } from '../middleware/asyncHandler';
+import { validate, getValidated } from '../middleware/validate';
 
-const prisma = new PrismaClient();
 const router = Router();
 
-/**
- * GET /calendar?from=YYYY-MM-DD&to=YYYY-MM-DD&limit=50
- * Returns upcoming releases/episodes for titles in the user's watchlist, merged chronologically.
- */
-router.get('/', requireAuth, async (req: any, res) => {
-    try {
-        const userId: number = req.user.id;
-        
-        const limit = Math.min(Number(req.query.limit ?? 50), 200);
-        const fromStr = (req.query.from as string) ?? new Date().toISOString().slice(0, 10);
-        const toStr = (req.query.to as string) ?? null;
+// --- Helpers ---
+const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+const isValidYMD = (s: string) => {
+    if (!dateRe.test(s)) return false;
+    const d = new Date(`${s}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+};
 
-        const from = new Date(`${fromStr}T00:00:00Z`);
-        const to = toStr ? new Date(`${toStr}T23:59:59Z`) : null;
+const todayYMD = () => new Date().toISOString().slice(0, 10);
+
+// Coerce YYYY-MM-DD -> Date at 00:00:00.000Z
+const ymdToStartOfDay = z
+    .string()
+    .refine((s) => dateRe.test(s) && isValidYMD(s), { message: 'must be a valid YYYY-MM-DD' })
+    .transform((s) => new Date(`${s}T00:00:00Z`));
+
+// Coerce YYYY-MM-DD -> Date at 23:59:59.999Z
+const ymdToEndOfDay = z
+    .string()
+    .refine((s) => dateRe.test(s) && isValidYMD(s), { message: 'must be a valid YYYY-MM-DD' })
+    .transform((s) => new Date(`${s}T23:59:59.999Z`));
+
+const calendarQuerySchema = z.object({
+    // Accept strings, default to today (YYYY-MM-DD). We’ll coerce to Date below.
+    from: z
+        .string()
+        .optional()
+        .default(todayYMD)
+        .pipe(ymdToStartOfDay), // => Date
+    to: z
+        .string()
+        .optional()
+        .transform((s) => (s === undefined ? undefined : s)) // keep undefined when missing
+        .pipe(ymdToEndOfDay.optional()), // => Date | undefined
+    limit: z.coerce.number().int().min(1).max(200).optional().default(50),
+})
+.superRefine((val, ctx) => {
+    if (val.to && val.from.getTime() > val.to.getTime()) {
+        ctx.addIssue({
+            code: "custom",
+            message: 'to must be on or after from',
+            path: ['to'],
+        });
+    }
+});
+
+/** @route GET /v1/calendar
+ *  @summary Merged release calendar for user's watchlist
+ *  @auth Bearer
+ *  @query { from?: 'YYYY-MM-DD'=today, to?: 'YYYY-MM-DD', limit?: int(1..200)=50 }
+ *  @returns 200 { items: CalendarItem[], nextCursor: null }
+ *  @errors 400 VALIDATION_ERROR | 401 AUTH_TOKEN_*
+ */
+router.get(
+    '/', 
+    requireAuth, 
+    validate('query', calendarQuerySchema),
+    asyncHandler(async (req: any, res) => {
+        const userId: number = req.user.id;
+        const { from, to, limit } = getValidated<z.infer<typeof calendarQuerySchema>>(req, 'query');
 
         // Get user's watchlist title IDs
         const watchlist = await prisma.watchlist.findMany({
@@ -27,8 +76,9 @@ router.get('/', requireAuth, async (req: any, res) => {
             select: { titleId: true, title: { select: { id: true, type: true, name: true } } },
         });
 
+        if (watchlist.length === 0) return res.json({ items: [], nextCursor: null });
+
         const titleIds = watchlist.map(w => w.titleId);
-        if (titleIds.length === 0) return res.json({ items: [], nextCursor: null });
 
         // Fetch upcoming items
         const [movieEvents, tvEpisodes] = await Promise.all([
@@ -38,9 +88,17 @@ router.get('/', requireAuth, async (req: any, res) => {
                     date: { gte: from, ...(to ? { lte: to} : {}) },
                 },
                 select: {
-                    id: true, titleId: true, date: true, type: true, country: true,
-                    title: { select: { name: true, type: true } },
-
+                    id: true, 
+                    titleId: true, 
+                    date: true, 
+                    type: true, 
+                    country: true,
+                    title: { 
+                        select: { 
+                            name: true, 
+                            type: true 
+                        } 
+                    },
                 }
             }),
             prisma.episode.findMany({
@@ -80,7 +138,6 @@ router.get('/', requireAuth, async (req: any, res) => {
         const tvItems = tvEpisodes.map((ep) => {
             const networksAll = (ep.title.networksJson as unknown as Provider[] | null) ?? [];
             const providersRaw = ep.title.providersJson as unknown as Record<string, any> | null;
-            
             const providers = pickProviderBadges(providersRaw, "US", 4);
             
             return {
@@ -102,9 +159,7 @@ router.get('/', requireAuth, async (req: any, res) => {
         const merged = [...movieItems, ...tvItems].sort((a, b) => a.date.localeCompare(b.date));
 
         res.json({ items: merged.slice(0, limit), nextCursor: null });
-    } catch (err: any) {
-        res.status(500).json({ error: err?.message ?? "Calendar failed" });
-    }
-});
+    })
+);
 
 export default router;

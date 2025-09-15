@@ -1,9 +1,12 @@
-import { PrismaClient, TitleType } from '@prisma/client';
+import { TitleType } from '@prisma/client';
 
-const prisma = new PrismaClient();
+import { prisma } from '../db/client';
 
 const LOCK_NS = 42_100;
 
+/**
+ *
+ */
 export async function withTitleLock(titleId: number, fn: () => Promise<
         {
             kind: string; insertedOrUpdated: number // refreshMovie output

@@ -13,6 +13,7 @@
     "generate": "prisma generate",
     "job:refresh:once": "ts-node -r dotenv/config src/services/refreshNightly.ts --once",
     "lint": "eslint ./src --ext .ts,.tsx --max-warnings=0",
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],
@@ -41,6 +42,7 @@
     "@typescript-eslint/eslint-plugin": "^8.42.0",
     "@typescript-eslint/parser": "^8.42.0",
     "eslint": "^9.35.0",
+    "eslint-plugin-jsdoc": "^57.0.10",
     "globals": "^16.3.0",
     "nodemon": "^3.1.10",
     "prisma": "^6.15.0",

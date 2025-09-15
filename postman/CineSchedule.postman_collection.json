@@ -1,0 +1,342 @@
+{
+  "info": {
+    "name": "CineSchedule v1",
+    "_postman_id": "f3a8a7ee-7f4a-45f2-9c9d-000000000001",
+    "description": "Stable API for Phase 7. Set {{baseUrl}} and capture {{token}} via /auth/login test script.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://api.cineschedule.com/v1" },
+    { "key": "token", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{token}}", "type": "string" }
+    ]
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": { "method": "GET", "url": "{{baseUrl}}/health" },
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{ \"ok\": true, \"db\": true, \"time\": \"2025-09-12T19:00:00.000Z\" }"
+            },
+            {
+              "name": "500 INTERNAL_ERROR",
+              "originalRequest": { "method": "GET", "url": "{{baseUrl}}/health" },
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{ \"error\": { \"code\": \"INTERNAL_ERROR\", \"message\": \"NOW() query returned no rows\" }, \"requestId\": \"req_abc123\" }"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /auth/register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"0123456789x\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": { "method": "POST", "url": "{{baseUrl}}/auth/register" },
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{ \"token\": \"<jwt>\", \"user\": { \"id\": 1, \"email\": \"user@example.com\" } }"
+            },
+            {
+              "name": "409 CONFLICT",
+              "originalRequest": { "method": "POST", "url": "{{baseUrl}}/auth/register" },
+              "status": "Conflict",
+              "code": 409,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{ \"error\": { \"code\": \"CONFLICT\", \"message\": \"Email is already associated with an account\" }, \"requestId\": \"req_abc123\" }"
+            },
+            {
+              "name": "400 VALIDATION_ERROR",
+              "originalRequest": { "method": "POST", "url": "{{baseUrl}}/auth/register" },
+              "status": "Bad Request",
+              "code": 400,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{ \"error\": { \"code\": \"VALIDATION_ERROR\", \"message\": \"Invalid request\", \"details\": { \"issues\": [] } }, \"requestId\": \"req_abc123\" }"
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.token, 'token exists').to.be.a('string').and.not.empty;",
+                  "// Save token for the whole collection:",
+                  "pm.collectionVariables.set('token', json.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"0123456789x\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": { "method": "POST", "url": "{{baseUrl}}/auth/login" },
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{ \"token\": \"<jwt>\" }"
+            },
+            {
+              "name": "401 AUTH_INVALID_CREDENTIALS",
+              "originalRequest": { "method": "POST", "url": "{{baseUrl}}/auth/login" },
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{ \"error\": { \"code\": \"AUTH_INVALID_CREDENTIALS\", \"message\": \"Invalid credentials\" }, \"requestId\": \"req_abc123\" }"
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/change-password",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "body": { "mode": "raw", "raw": "{\n  \"oldPassword\": \"0123456789x\",\n  \"newPassword\": \"new0123456789x\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/change-password", "host": ["{{baseUrl}}"], "path": ["auth", "change-password"] }
+          },
+          "response": [
+            { "name": "200 OK", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"ok\": true }" },
+            { "name": "401 AUTH_INVALID_CREDENTIALS", "status": "Unauthorized", "code": 401, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"error\": { \"code\": \"AUTH_INVALID_CREDENTIALS\", \"message\": \"Old password is incorrect\" }, \"requestId\": \"req_abc123\" }" }
+          ]
+        },
+        {
+          "name": "POST /auth/logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] }
+          },
+          "response": [
+            { "name": "200 OK", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"ok\": true }" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Watchlist",
+      "item": [
+        {
+          "name": "GET /watchlist",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "url": { "raw": "{{baseUrl}}/watchlist?limit=5", "host": ["{{baseUrl}}"], "path": ["watchlist"], "query": [{ "key": "limit", "value": "5" }] }
+          },
+          "response": [
+            { "name": "200 OK", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"items\": [], \"nextCursor\": null }" },
+            { "name": "400 VALIDATION_ERROR", "status": "Bad Request", "code": 400, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"error\": { \"code\": \"VALIDATION_ERROR\", \"message\": \"Invalid request\" }, \"requestId\": \"req_abc123\" }" }
+          ]
+        },
+        {
+          "name": "POST /watchlist/tmdb",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "body": { "mode": "raw", "raw": "{ \"tmdbId\": 27205, \"type\": \"MOVIE\" }" },
+            "url": { "raw": "{{baseUrl}}/watchlist/tmdb", "host": ["{{baseUrl}}"], "path": ["watchlist", "tmdb"] }
+          },
+          "response": [
+            { "name": "200 OK", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"ok\": true, \"titleId\": 42, \"watchlist\": { \"userId\": 1, \"titleId\": 42 }, \"refresh\": { } }" },
+            { "name": "502 TMDB_UPSTREAM_ERROR", "status": "Bad Gateway", "code": 502, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"error\": { \"code\": \"TMDB_UPSTREAM_ERROR\", \"message\": \"TMDB fetch failed\" }, \"requestId\": \"req_abc123\" }" }
+          ]
+        },
+        {
+          "name": "POST /watchlist/:titleId",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "url": { "raw": "{{baseUrl}}/watchlist/42", "host": ["{{baseUrl}}"], "path": ["watchlist", "42"] }
+          },
+          "response": [
+            { "name": "201 CREATED (first add) or 200 OK (idempotent)", "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"id\": 123, \"userId\": 1, \"titleId\": 42, \"createdAt\": \"...\", \"title\": { } }" },
+            { "name": "404 RESOURCE_NOT_FOUND", "status": "Not Found", "code": 404, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"error\": { \"code\": \"RESOURCE_NOT_FOUND\", \"message\": \"Title not found\" }, \"requestId\": \"req_abc123\" }" }
+          ]
+        },
+        {
+          "name": "DELETE /watchlist/:watchlistItemId",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "url": { "raw": "{{baseUrl}}/watchlist/123", "host": ["{{baseUrl}}"], "path": ["watchlist", "123"] }
+          },
+          "response": [
+            { "name": "200 OK (idempotent)", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"ok\": true }" },
+            { "name": "403 AUTH_FORBIDDEN", "status": "Forbidden", "code": 403, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"error\": { \"code\": \"AUTH_FORBIDDEN\", \"message\": \"Not your watchlist item\" }, \"requestId\": \"req_abc123\" }" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Titles",
+      "item": [
+        {
+          "name": "GET /titles",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "url": { "raw": "{{baseUrl}}/titles?limit=5", "host": ["{{baseUrl}}"], "path": ["titles"], "query": [{ "key": "limit", "value": "5" }] }
+          },
+          "response": [
+            { "name": "200 OK", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"items\": [], \"nextCursor\": null }" },
+            { "name": "400 VALIDATION_ERROR", "status": "Bad Request", "code": 400, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"error\": { \"code\": \"VALIDATION_ERROR\", \"message\": \"Invalid request\" }, \"requestId\": \"req_abc123\" }" }
+          ]
+        },
+        {
+          "name": "GET /titles/:id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "url": { "raw": "{{baseUrl}}/titles/42", "host": ["{{baseUrl}}"], "path": ["titles", "42"] }
+          },
+          "response": [
+            { "name": "200 OK", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"id\": 42, \"tmdbId\": 27205, \"type\": \"MOVIE\", \"name\": \"Inception\" }" },
+            { "name": "404 RESOURCE_NOT_FOUND", "status": "Not Found", "code": 404, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"error\": { \"code\": \"RESOURCE_NOT_FOUND\", \"message\": \"Title not found\" }, \"requestId\": \"req_abc123\" }" }
+          ]
+        },
+        {
+          "name": "POST /titles",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "body": { "mode": "raw", "raw": "{ \"tmdbId\": 27205, \"type\": \"MOVIE\", \"name\": \"Inception\", \"releaseDate\": \"2010-07-16\" }" },
+            "url": { "raw": "{{baseUrl}}/titles", "host": ["{{baseUrl}}"], "path": ["titles"] }
+          },
+          "response": [
+            { "name": "201 CREATED", "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"id\": 42, \"tmdbId\": 27205, \"type\": \"MOVIE\", \"name\": \"Inception\" }" },
+            { "name": "400 VALIDATION_ERROR", "status": "Bad Request", "code": 400, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"error\": { \"code\": \"VALIDATION_ERROR\", \"message\": \"Invalid request\" }, \"requestId\": \"req_abc123\" }" }
+          ]
+        },
+        {
+          "name": "POST /titles/tmdb",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "body": { "mode": "raw", "raw": "{ \"tmdbId\": 1399, \"type\": \"TV\" }" },
+            "url": { "raw": "{{baseUrl}}/titles/tmdb", "host": ["{{baseUrl}}"], "path": ["titles", "tmdb"] }
+          },
+          "response": [
+            { "name": "201 CREATED", "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"id\": 99, \"tmdbId\": 1399, \"type\": \"TV\", \"name\": \"Game of Thrones\" }" },
+            { "name": "502 TMDB_UPSTREAM_ERROR", "status": "Bad Gateway", "code": 502, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"error\": { \"code\": \"TMDB_UPSTREAM_ERROR\", \"message\": \"TMDB fetch failed\" }, \"requestId\": \"req_abc123\" }" }
+          ]
+        },
+        {
+          "name": "GET /titles/search",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "url": {
+              "raw": "{{baseUrl}}/titles/search?q=inception&type=MOVIE&page=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["titles", "search"],
+              "query": [
+                { "key": "q", "value": "inception" },
+                { "key": "type", "value": "MOVIE" },
+                { "key": "page", "value": "1" }
+              ]
+            }
+          },
+          "response": [
+            { "name": "200 OK", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"page\": 1, \"results\": [], \"total_pages\": 0, \"total_results\": 0 }" },
+            { "name": "400 VALIDATION_ERROR", "status": "Bad Request", "code": 400, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"error\": { \"code\": \"VALIDATION_ERROR\", \"message\": \"Invalid request\" }, \"requestId\": \"req_abc123\" }" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Calendar",
+      "item": [
+        {
+          "name": "GET /calendar",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "url": {
+              "raw": "{{baseUrl}}/calendar?from=2025-09-01&to=2025-09-30&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["calendar"],
+              "query": [
+                { "key": "from", "value": "2025-09-01" },
+                { "key": "to", "value": "2025-09-30" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          },
+          "response": [
+            { "name": "200 OK", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"items\": [], \"nextCursor\": null }" },
+            { "name": "400 VALIDATION_ERROR", "status": "Bad Request", "code": 400, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"error\": { \"code\": \"VALIDATION_ERROR\", \"message\": \"Invalid request\" }, \"requestId\": \"req_abc123\" }" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Errors",
+      "item": [
+        {
+          "name": "Example 401 (no token) → /watchlist",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/watchlist", "host": ["{{baseUrl}}"], "path": ["watchlist"] }
+          },
+          "response": [
+            { "name": "401 AUTH_TOKEN_INVALID", "status": "Unauthorized", "code": 401, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{ \"error\": { \"code\": \"AUTH_TOKEN_INVALID\", \"message\": \"Missing or invalid Authorization header\" }, \"requestId\": \"req_abc123\" }" }
+          ]
+        }
+      ]
+    }
+  ]
+}

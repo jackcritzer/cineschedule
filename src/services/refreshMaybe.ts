@@ -10,6 +10,9 @@ type RefreshOpts = {
   reason?: string;         // for logs
 };
 
+/**
+ *
+ */
 export async function refreshMaybe(
     title: Pick<Title, 'id'|'type'|'name'|'lastRefreshedAt'>, 
     opts: RefreshOpts = {}

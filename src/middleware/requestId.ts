@@ -1,6 +1,9 @@
 import { randomUUID } from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 
+/**
+ *
+ */
 export function requestId() {
     return (req: Request, res: Response, next: NextFunction) => {
         const id = randomUUID();

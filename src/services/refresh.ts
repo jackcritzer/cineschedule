@@ -1,7 +1,7 @@
-import { PrismaClient, ReleaseType, TitleType, Prisma, Title } from "@prisma/client";
-import { getMovieReleaseDates, getTvDetails, getTvSeason, getTvContentRatings, getTvWatchProviders } from "../lib/tmdb";
+import { ReleaseType, TitleType, Prisma, Title } from "@prisma/client";
 
-const prisma = new PrismaClient();
+import { prisma } from '../db/client';
+import { getMovieReleaseDates, getTvDetails, getTvSeason, getTvContentRatings, getTvWatchProviders } from "../lib/tmdb";
 
 type ReleaseTypeEnum = ReleaseType;
 
@@ -21,6 +21,9 @@ function mapTmdbReleaseType(typeNum: number): ReleaseTypeEnum {
     return "STREAMING";
 }
 
+/**
+ *
+ */
 export async function refreshTitleData(titleId: number) {
     const title = await prisma.title.findUnique({ where: { id: titleId } });
     if (!title) throw new Error("Title not found");
@@ -32,6 +35,9 @@ export async function refreshTitleData(titleId: number) {
     return { kind: "unknown" };
 }
 
+/**
+ *
+ */
 export async function refreshMovie(titleId: number):Promise<{ kind: TitleType; reason?: string; insertedOrUpdated?: number }> {
     const title = await prisma.title.findUnique({ where: { id: titleId }, select: { id: true, tmdbId: true, type: true, name: true } });
     if (!title) throw new Error(`Title ${titleId} not found`);
@@ -73,6 +79,9 @@ export async function refreshMovie(titleId: number):Promise<{ kind: TitleType; r
         return { kind: "MOVIE", insertedOrUpdated: upserts.length };
 }
 
+/**
+ *
+ */
 export async function refreshTv(titleId: number): Promise<{ kind: TitleType; reason?: string; status?: string; upserted?: number; season?: number; }> {
     const title = await prisma.title.findUnique({ where: { id: titleId }, select: { id: true, tmdbId: true, type: true, name: true } });
     if (!title) throw new Error(`Title ${titleId} not found`);
@@ -163,6 +172,9 @@ export async function refreshTv(titleId: number): Promise<{ kind: TitleType; rea
     return { kind: "TV", upserted: results.length, season: next.season_number };
 }
 
+/**
+ *
+ */
 export async function refreshTitleOnAdd(title: Title) {
     if (!REFRESH_ON_ADD) return;
 
