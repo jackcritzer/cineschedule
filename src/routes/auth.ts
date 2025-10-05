@@ -30,7 +30,7 @@ router.post(
         try {
             const passwordHash = await hashPassword(password);
             const user = await prisma.user.create({ data: { email, passwordHash } });
-            const token = signJwt({ sub: user.id });
+            const token = signJwt({ sub: user.id, typ: 'access' });
             res.json({ token, user: { id: user.id, email: user.email } });
         } catch (err: any) {
             if (err?.code === 'P2002') {
@@ -54,14 +54,16 @@ router.post(
     asyncHandler(async (req, res) => {
         const { email, password } = req.body as z.infer<typeof authSchema>;
 
+        if (!email || !password) throw new ApiError(400, 'AUTH_INVALID_CREDENTIALS', 'Email and password required')
+
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user) throw new ApiError(401, 'AUTH_INVALID_CREDENTIALS', 'Invalid credentials');
 
         const valid = await verifyPassword(password, user.passwordHash);
         if (!valid) throw new ApiError(401, 'AUTH_INVALID_CREDENTIALS', 'Invalid credentials');
 
-        const token = signJwt({ sub: user.id });
-        res.json({ token });
+        const token = signJwt({ sub: user.id, typ: 'access' });
+        res.json({ token, user });
     })
 );
 

@@ -1,46 +1,31 @@
-import type { Request, Response, NextFunction } from 'express';
-
-import { ApiError } from '../errors';
+import type { NextFunction, Request, Response } from 'express';
 
 /**
  *
  */
-export function errorHandler() {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    return (err: unknown, req: Request, res: Response, _next: NextFunction) => {
-        const requestId = (req as any).requestId;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function errorHandler(err: any, req: Request, res: Response, _next: NextFunction) {
+    const rid = (res.locals as any).rid;
+    const status = typeof err?.status === 'number' ? err.status : 500;
 
-        if (err instanceof ApiError) {
-            // Log minimal structured event (replace with pino/winston later)
-            console.error(JSON.stringify({
-                level: 'error',
-                requestId,
-                status: err.status,
-                code: err.code,
-                message: err.message,
-            }));
+    // Dev-friendly console line with stack
+    console.error(JSON.stringify({
+        level: 'error',
+        msg: 'req.error',
+        rid,
+        method: req.method,
+        path: req.originalUrl,
+        status,
+        name: err?.name,
+        code: err?.code,
+        message: err?.message,
+        stack: process.env.NODE_ENV !== 'production' ? err?.stack : undefined,
+    }));
 
-            return res.status(err.status).json({
-                error: {
-                    code: err.code,
-                    message: err.message,
-                    details: err.details ?? null,
-                    requestId,
-                    docs: `https://api.cineschedule.com/v1/docs/errors#${err.code}`
-                }
-            });
-        }
-
-        // Fallback — never leak stack in prod
-        console.error(JSON.stringify({ level: 'error', requestId, unhandled: true }));
-        return res.status(500).json({
-            error: {
-                code: 'INTERNAL_ERROR',
-                message: 'Unexpected server error.',
-                details: null,
-                requestId,
-                docs: 'https://api.cineschedule.com/v1/docs/errors#INTERNAL_ERROR'
-            }
-        });
-    }
+    // Keep your consistent envelope
+    res.status(status).json({
+        message: err?.message || 'Unexpected server error',
+        code: err?.code || 'INTERNAL_SERVER_ERROR',
+        requestId: rid,
+    });
 }

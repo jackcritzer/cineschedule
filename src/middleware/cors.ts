@@ -32,6 +32,7 @@ const corsOptions: CorsOptions = {
     },
     methods: ["GET", "POST", "DELETE", "OPTIONS"],
     allowedHeaders: ["Authorization", "Content-Type"],
+    exposedHeaders: ['X-API-Version', 'Deprecation', 'Sunset', 'Link'],
     credentials: false
 };
 

@@ -36,7 +36,7 @@ export function verifyJwt<T extends JwtPayload = JwtPayload>(token: string): T {
     const kid = decodedUnverified?.header?.kid;
     const byKidSecret = jwtKeyStore.getByKid(kid);
     if (byKidSecret) {
-        return jwt.verify(token, byKidSecret) as T;
+        return jwt.verify(token, byKidSecret) as JwtPayload & { typ?: string } as T;
     }
 
     // Fallback: try all keys (helps older tokens without kid)

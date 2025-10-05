@@ -13,12 +13,12 @@ $ErrorActionPreference = "Stop"
 $procs = (netstat -ano | findstr ":$DbPort") -split "`n" | Where-Object { $_ -match 'LISTENING' }
 if ($procs) {
   $pids = $procs | ForEach-Object { ($_ -split '\s+')[-1] } | Select-Object -Unique
-  foreach ($pid in $pids) {
+  foreach ($p in $pids) {
     try {
       $name = (tasklist /FI "PID eq $pid") -join "`n"
       if ($name -notmatch "com.docker.backend") {
         Write-Host "Killing PID $pid using :$DbPort" -ForegroundColor Yellow
-        Stop-Process -Id $pid -Force
+        Stop-Process -Id $p -Force
       }
     } catch {}
   }
