@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
 
-import { asyncHandler } from '../middleware/asyncHandler';
-import { searchTmdb } from '../lib/tmdb';
-import { requireAuth } from '../middleware/auth';
-import { validate, getValidated } from '../middleware/validate';
-import { ApiError } from '../errors';
+import { asyncHandler } from '../../middleware/asyncHandler';
+import { searchTmdb } from '../../lib/tmdb';
+import { requireAuth } from '../../middleware/auth';
+import { validate, getValidated } from '../../middleware/validate';
+import { ApiError } from '../../errors';
 
 const router = Router();
 

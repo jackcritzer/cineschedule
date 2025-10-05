@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { prisma } from '../db/client';
-import { asyncHandler } from '../middleware/asyncHandler';
-import { requireAuth } from '../middleware/auth';
-import { fetchTmdbTitle } from '../lib/tmdb';
-import { refreshMaybe } from '../services/refreshMaybe';
-import { validate, getValidated } from '../middleware/validate';
-import { ApiError } from '../errors';
+import { prisma } from '../../db/client';
+import { asyncHandler } from '../../middleware/asyncHandler';
+import { requireAuth } from '../../middleware/auth';
+import { fetchTmdbTitle } from '../../lib/tmdb';
+import { refreshMaybe } from '../../services/refreshMaybe';
+import { validate, getValidated } from '../../middleware/validate';
+import { ApiError } from '../../errors';
 
 const router = Router();
 

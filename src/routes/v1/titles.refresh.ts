@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { refreshTitleData } from '../services/refresh';
-import { requireAuth } from '../middleware/auth';
-import { asyncHandler } from '../middleware/asyncHandler';
-import { validate, getValidated } from '../middleware/validate';
+import { refreshTitleData } from '../../services/refresh';
+import { requireAuth } from '../../middleware/auth';
+import { asyncHandler } from '../../middleware/asyncHandler';
+import { validate, getValidated } from '../../middleware/validate';
 import { z } from 'zod';
-import { ApiError } from '../errors';
+import { ApiError } from '../../errors';
 
 const router = Router();
 
