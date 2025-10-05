@@ -54,6 +54,8 @@ router.post(
     asyncHandler(async (req, res) => {
         const { email, password } = req.body as z.infer<typeof authSchema>;
 
+        if (!email || !password) throw new ApiError(400, 'AUTH_INVALID_CREDENTIALS', 'Email and password required')
+
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user) throw new ApiError(401, 'AUTH_INVALID_CREDENTIALS', 'Invalid credentials');
 
@@ -61,7 +63,7 @@ router.post(
         if (!valid) throw new ApiError(401, 'AUTH_INVALID_CREDENTIALS', 'Invalid credentials');
 
         const token = signJwt({ sub: user.id });
-        res.json({ token });
+        res.json({ token, user });
     })
 );
 
