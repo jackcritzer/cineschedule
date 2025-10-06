@@ -144,17 +144,28 @@ jobs:
             exit 1
           fi
 
-      - name: Smoke check
+      - name: Post-deploy smoke check
         env:
-          HEALTH_URL: ${{ secrets.RENDER_HEALTH_URL }} # e.g., https://api.cineschedule.com/v1/health
+          HEALTH_URL: ${{ vars.RENDER_HEALTH_URL || secrets.RENDER_HEALTH_URL }}
         run: |
-          for i in {1..20}; do
+          set -euo pipefail
+
+          if [ -z "${HEALTH_URL:-}" ]; then
+            echo "HEALTH_URL is empty. Set it as an Environment Variable (vars) or Secret."
+            exit 1
+          fi
+
+          echo "Health URL: $HEALTH_URL"
+          for i in $(seq 1 20); do
             echo "Health attempt $i..."
-            if curl -fsS "$HEALTH_URL" | jq -e '.ok == true' >/dev/null; then
+            # -f: fail on >=400, -s: silent, -S: show errors
+            BODY="$(curl -fsS "$HEALTH_URL" || true)"
+            if printf '%s' "$BODY" | grep -q '"ok":\s*true'; then
               echo "Healthy ✅"
               exit 0
             fi
             sleep 5
           done
+
           echo "Service not healthy after timeout"
           exit 1
