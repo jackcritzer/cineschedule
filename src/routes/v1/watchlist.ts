@@ -63,13 +63,16 @@ router.post(
         });
 
         // Refresh immediately so calendar/search reflect providers/episodes/releases
-        await refreshMaybe(title, { reason: "on-watchlist-add" }).catch((err) => {
-            throw new ApiError(502, "UPSTREAM_ERROR", (err as Error).message ?? "Refresh failed");
-        });
+        await Promise
+            .resolve(refreshMaybe(title, { reason: "watchlist-add" }))
+            .catch((e) => {
+                throw new ApiError(502, "UPSTREAM_ERROR", (e as Error).message || "Refresh failed");
+            });
 
         const existing = await prisma.watchlist.findUnique({
             where: { userId_titleId: { userId, titleId: title.id } }
         });
+
         const wl = existing
             ? existing
             : await prisma.watchlist.create({ data: { userId, titleId: title.id } });
@@ -94,7 +97,9 @@ router.post(
         if (!title) throw notFound("Title not found");
 
         // Optional: you may choose to refresh here as well
-        await refreshMaybe(title, { reason: "on-watchlist-add-existing" }).catch(() => {});
+        await Promise.resolve(
+            refreshMaybe(title, { reason: "watchlist-add-existing" })
+        ).catch(() => {});
 
         const existing = await prisma.watchlist.findUnique({
             where: { userId_titleId: { userId, titleId } }
@@ -136,15 +141,15 @@ router.get(
             }
         });
 
-        const lastItem = items[items.length - 1];
-        const nextCursor = items.length === limit && lastItem ? lastItem.id : null;
-
+        let nextCursor: number | null = null;
         let page = items;
+
         if (items.length > limit) {
             page = items.slice(0, limit);
+            nextCursor = page[page.length - 1]?.id ?? null; // cursor = last item of returned page
         }
 
-        res.json({ items: page, nextCursor });
+        return res.json({ items: page, nextCursor }); // <-- return page, not items
     })
 );
 

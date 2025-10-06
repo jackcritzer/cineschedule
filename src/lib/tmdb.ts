@@ -206,7 +206,7 @@ type ProviderBuckets = {
  *
  */
 export function pickProviderBadges(results: Record<string, any> | null | undefined, region = "US", max = 4): Provider[] {
-	const r = results?.[region] ?? {};
+	const r = results?.results?.[region] ?? {};
 	const buckets: ProviderBuckets = {
 		flatrate: (r.flatrate ?? []).map(mapProv),
 		free: (r.free ?? []).map(mapProv),

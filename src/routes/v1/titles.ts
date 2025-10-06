@@ -61,13 +61,13 @@ router.get(
             }
         });
 
+        let nextCursor: number | null = null;
         let items = rows;
-
-        const lastItem = items[items.length - 1];
-        const nextCursor = items.length === limit && lastItem ? lastItem.id : null;
 
         if (rows.length > limit) {
             items = rows.slice(0, limit);
+            // Use the last returned item as the cursor (Prisma pattern)
+            nextCursor = items[items.length - 1]?.id ?? null;
         }
 
         res.json({ items, nextCursor });
@@ -131,9 +131,11 @@ router.post(
         });
 
         if (REFRESH_ON_ADD) {
-            await refreshMaybe(title, { reason: "on-add" }).catch((err) => {
-                throw new ApiError(502, "UPSTREAM_ERROR", (err as Error).message ?? "Refresh failed");
-            });
+            await Promise
+                .resolve(refreshMaybe(title, { reason: "titles-add" }))
+                .catch((e) => {
+                    throw new ApiError(502, "UPSTREAM_ERROR", (e as Error).message || "Refresh failed");
+                });
         }
 
         res.status(201).json(title);

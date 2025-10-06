@@ -23,6 +23,15 @@ jobs:
       - name: Install deps
         run: npm ci
 
+      - name: Setup test env
+        run: |
+          cp .env.test.example .env.test 2>/dev/null || true
+          echo "TMDB_API_KEY=dummy" >> .env.test
+          echo "DEFAULT_REGION=US" >> .env.test
+          echo "JWT_KEYS=dev_kid=dev_secret" >> .env.test
+          echo "JWT_CURRENT_KID=dev_kid" >> .env.test
+          echo "DATABASE_URL=postgres://user:pass@localhost:5432/testdb" >> .env.test
+
       - name: Prisma generate
         run: npx prisma generate
 
@@ -32,8 +41,8 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Tests (if present)
-        run: npm test --if-present
+      - name: Tests
+        run: pnpm vitest --run --coverage
 
       - name: Build
         run: npm run build

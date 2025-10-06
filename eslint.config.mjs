@@ -16,7 +16,7 @@ export default [
 
   // Project rules for TS files
   {
-    files: ['src/**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}', 'tests/**/*.{ts,tsx}'],
     // (tseslint.configs.recommended already sets the parser)
     languageOptions: {
       ecmaVersion: 'latest',

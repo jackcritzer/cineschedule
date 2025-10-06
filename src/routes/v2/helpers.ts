@@ -1,8 +1,10 @@
 import crypto from "crypto";
 import { z } from "zod";
 
-export type MediaType = "movie" | "tv";
-export type ReleaseType = "theatrical" | "digital" | "streaming";
+import { ReleaseType, TitleType } from "@prisma/client";
+
+export type ApiTitleType = "movie" | "tv";
+export type ApiReleaseType = "theatrical" | "digital" | "streaming";
 
 export const DEFAULT_REGION = (process.env.DEFAULT_REGION || "US").toUpperCase();
 export const TMDB_API_KEY = process.env.TMDB_API_KEY;
@@ -74,8 +76,10 @@ export function decodeCursor(s?: string): CursorShape | undefined {
 /**
  *
  */
-export function cursorKey(date: string, titleId: number, type: ReleaseType): string {
-	return `${date}|${titleId}|${type}`;
+export function cursorKey(date: string, titleId: number, type: ApiReleaseType | undefined): string {
+	let key = `${date}|${titleId}}`;
+	if (type) key += `|${type}`
+	return key;
 }
 
 /**
@@ -135,34 +139,38 @@ const ymdToEndOfDay = z
 /**
  *
  */
-export function apiToDbReleaseType(t: ReleaseType): "THEATRICAL" | "DIGITAL" | "STREAMING" {
+export function apiToDbReleaseType(t: ApiReleaseType): ReleaseType {
 	switch (t) {
-		case "theatrical":
-			return "THEATRICAL";
-		case "digital":
-			return "DIGITAL";
-		case "streaming":
-			return "STREAMING";
+		case "theatrical": return "THEATRICAL";
+		case "digital":    return "DIGITAL";
+		case "streaming":  return "STREAMING";
 	}
 }
 
 /**
  *
  */
-export function dbToApiReleaseType(
-	t: "THEATRICAL" | "DIGITAL" | "STREAMING" | "PHYSICAL"
-): ReleaseType | null {
+export function dbToApiReleaseType(t: ReleaseType): ApiReleaseType | undefined {
 	switch (t) {
-		case "THEATRICAL":
-			return "theatrical";
-		case "DIGITAL":
-			return "digital";
-		case "STREAMING":
-			return "streaming";
-		default:
-			// We don't expose PHYSICAL in the API v2 calendar response
-			return null;
+		case "THEATRICAL": return "theatrical";
+		case "DIGITAL":    return "digital";
+		case "STREAMING":  return "streaming";
+		default:           return undefined; // skip PHYSICAL
 	}
+}
+
+/**
+ *
+ */
+export function titleTypeToAPI(t: TitleType): ApiTitleType {
+	return t === "MOVIE" ? "movie" : "tv";
+}
+
+/**
+ *
+ */
+export function apiToDbTitleType(t: ApiTitleType): TitleType {
+	return t === "movie" ? "MOVIE" : "TV";
 }
 
 // === Provider extraction from Title.providersJson ===

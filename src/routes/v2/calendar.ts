@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 
+import { ReleaseType } from "@prisma/client";
+
 import {
 	CalendarQuerySchema,
 	cursorKey,
@@ -10,9 +12,9 @@ import {
 	parseProviderIds,
 	toSlug,
 	cmpCursorKey,
-	type ReleaseType,
 	apiToDbReleaseType,
 	dbToApiReleaseType,
+	ApiReleaseType
 } from "./helpers";
 
 import { prisma } from "../../db/client";
@@ -36,10 +38,10 @@ export type CalendarResponse = { items: CalendarItem[]; nextCursor?: string | nu
 type RawCal = {
 	titleId: number;
 	title: string;
-	type: ReleaseType;
+	type: ApiReleaseType;
 	date: string; // YYYY-MM-DD
 	region: string;
-	// We will derive providers from title.providersJson instead of passing IDs here
+	providers?: unknown;    // from Title.providersJson
 };
 
 const router = Router();
@@ -48,11 +50,11 @@ const router = Router();
 // NOTE: We no longer rely on providerIds in the raw row; we compute providers from providersJson below.
 async function fetchUserCalendarRaw(
 	userId: number,
-	args: { from?: Date | undefined; to?: Date | undefined; type?: ReleaseType | undefined; region: string }
+	args: { from?: Date | undefined; to?: Date | undefined; type?: ApiReleaseType | undefined; region: string }
 ): Promise<RawCal[]> {
 	const where: any = {
 		title: { watchlist: { some: { userId } } },
-		country: args.region, // exact ISO-2 match
+		country: args.region,
 	};
 
 	if (args.from || args.to) {
@@ -61,8 +63,9 @@ async function fetchUserCalendarRaw(
 		if (args.to) where.date.lte = args.to;
 	}
 
+	// Filter by ReleaseEvent.type, not Title.type
 	if (args.type) {
-		where.type = apiToDbReleaseType(args.type);
+		where.type = apiToDbReleaseType(args.type); // THEATRICAL/DIGITAL/STREAMING
 	} else {
 		where.type = { in: ["THEATRICAL", "DIGITAL", "STREAMING"] };
 	}
@@ -73,13 +76,12 @@ async function fetchUserCalendarRaw(
 		select: {
 			titleId: true,
 			date: true,
-			type: true,
+			type: true,     // DB enum
 			country: true,
 			title: {
 				select: {
 					name: true,
-					providersJson: true,  // ✅ we’ll derive providers from this
-					networksJson: true,   // (kept available if you add “networks” later)
+					providersJson: true,  // ✅ derive providers from here
 				},
 			},
 		},
@@ -88,14 +90,16 @@ async function fetchUserCalendarRaw(
 	const out: RawCal[] = [];
 	for (const r of rows) {
 		const apiType = dbToApiReleaseType(r.type as any);
-		if (!apiType) continue; // skip PHYSICAL
+		if (!apiType) continue; // skip PHYSICAL/unknown
+
 
 		out.push({
 			titleId: r.titleId,
 			title: r.title.name,
-			type: apiType,
+			type: apiType, // 'theatrical' | 'digital' | 'streaming'
 			date: r.date.toISOString().slice(0, 10),
 			region: r.country ?? args.region,
+			providers: r.title.providersJson ?? undefined,
 		});
 	}
 	return out;
@@ -112,20 +116,10 @@ router.get(
 
 		const filterProviderIds = parseProviderIds(providerIds);
 
-		// Load raw release rows
-		const raw = await fetchUserCalendarRaw(userId, { from, to, type, region });
+		// Load raw release rows with providersJson in each row
+		const raw = await fetchUserCalendarRaw(userId, { from, to, type: type as ApiReleaseType, region });
 
-		// Fetch providersJson for all titles in one go to minimize queries
-		const titleIds = Array.from(new Set(raw.map((r) => r.titleId)));
-		const titleProviders = await prisma.title.findMany({
-			where: { id: { in: titleIds } },
-			select: { id: true, providersJson: true },
-		});
-		const providersByTitleId = new Map<number, any>(
-			titleProviders.map((t) => [t.id, t.providersJson])
-		);
-
-		// Build CalendarItem list using pickProviderBadges()
+		// Map provider badges directly from providersJson (no extra DB query)
 		function toProviderInfos(badges: BadgeProvider[]): ProviderInfo[] {
 			return badges.map((p) => ({
 				id: p.id,
@@ -136,12 +130,11 @@ router.get(
 		}
 
 		let items: CalendarItem[] = raw.map((r) => {
-			// Only attach providers for streaming/digital (as in v2 spec)
 			let providers: ProviderInfo[] | undefined = undefined;
-			if (r.type === "streaming" || r.type === "digital") {
-				const pj = providersByTitleId.get(r.titleId);
-				// ✅ Reuse your prioritization (flatrate → free → ads → rent → buy), max 4
-				const badges = pickProviderBadges(pj, region, 4); // returns {id,name,logoPath}
+			
+			// Only for digital/streaming per v2 spec
+			if (r.type === "digital" || r.type === "streaming") {
+				const badges = pickProviderBadges(r.providers as any, region, 4);
 				if (badges.length) providers = toProviderInfos(badges);
 			}
 
@@ -149,14 +142,14 @@ router.get(
 				id: deterministicId([r.titleId, r.date, r.type, r.region, providers?.map(p => p.id).join("-")]),
 				titleId: r.titleId,
 				title: r.title,
-				type: r.type,
+				type: apiToDbReleaseType(r.type),
 				date: r.date,
 				providers,
 				region: r.region,
 			} as CalendarItem;
 		});
 
-		// Provider filtering against selected provider IDs
+		// Provider filter
 		if (filterProviderIds.length > 0) {
 			const wanted = new Set(filterProviderIds);
 			items = items.filter((it) => {
@@ -167,16 +160,16 @@ router.get(
 
 		// Stable sort for cursoring
 		items.sort((a, b) => {
-			const ak = cursorKey(a.date, a.titleId, a.type);
-			const bk = cursorKey(b.date, b.titleId, b.type);
+			const ak = cursorKey(a.date, a.titleId, dbToApiReleaseType(a.type));
+			const bk = cursorKey(b.date, b.titleId, dbToApiReleaseType(b.type));
 			return cmpCursorKey(ak, bk);
 		});
 
-		// Cursor pagination (stateless)
+		// Cursor pagination
 		const startKey = decodeCursor(cursor)?.k;
 		let startIdx = 0;
 		if (startKey) {
-			startIdx = items.findIndex((it) => cmpCursorKey(cursorKey(it.date, it.titleId, it.type), startKey) > 0);
+			startIdx = items.findIndex((it) => cmpCursorKey(cursorKey(it.date, it.titleId, dbToApiReleaseType(it.type)), startKey) > 0);
 			if (startIdx < 0) startIdx = items.length;
 		}
 
@@ -187,7 +180,7 @@ router.get(
 		if (page.length > limit) {
 			const lastIdx = Math.min(limit - 1, page.length - 1);
 			const last = page[lastIdx];
-			if (last) nextCursor = encodeCursor({ k: cursorKey(last.date, last.titleId, last.type) });
+			if (last) nextCursor = encodeCursor({ k: cursorKey(last.date, last.titleId, dbToApiReleaseType(last.type)) });
 			pageItems = page.slice(0, limit);
 		}
 
