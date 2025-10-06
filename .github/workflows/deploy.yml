@@ -115,6 +115,8 @@ jobs:
   deploy_to_render:
     needs: [build_and_push_image, migrate_prod]
     runs-on: ubuntu-latest
+    environment:
+      name: production 
     steps:
       - name: Trigger Render deploy with pinned imageUrl
         env:
