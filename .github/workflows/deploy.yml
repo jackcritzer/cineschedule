@@ -5,74 +5,107 @@ on:
     branches: [ main ]
   workflow_dispatch: {}
 
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
 jobs:
   build_and_push_image:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write            # push to GHCR
+      packages: write
     outputs:
       image_sha_tag: ${{ steps.meta.outputs.image_sha_tag }}
+    env:
+      PRISMA_HIDE_UPDATE_MESSAGE: "1"
+      NODE_ENV: production
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Optional preflight (keeps prisma version pinned, catches obvious issues)
-      - name: Use Node 20.x
+      # Optional: sanity check the repo builds & Prisma client generates
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      - name: Install (dev) & prisma generate
+      - name: Install deps & generate Prisma client
         run: |
           npm ci
           npx prisma generate
-        env:
-          PRISMA_HIDE_UPDATE_MESSAGE: "1"
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Login to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Extract Docker metadata
+        id: meta_labels
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=sha-${{ github.sha || github.event.pull_request.head.sha }}
+            type=raw,value=main
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=CineSchedule API
+            org.opencontainers.image.created=${{ github.run_id }}
 
-      - name: Build image
+      - name: Build & push image (with cache)
         id: meta
-        run: |
-          SHORT_SHA=${GITHUB_SHA::7}
-          IMAGE_SHA_TAG="ghcr.io/${{ github.repository }}:sha-${SHORT_SHA}"
-          echo "image_sha_tag=$IMAGE_SHA_TAG" >> $GITHUB_OUTPUT
-          docker build -t "$IMAGE_SHA_TAG" .
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta_labels.outputs.tags }}
+          labels: ${{ steps.meta_labels.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # If your Dockerfile has multi-stage, specify target: production
+          # target: production
+          # some orgs disable provenance; set to false if you hit policy errors
+          provenance: false
 
-      - name: Push image
-        run: docker push "${{ steps.meta.outputs.image_sha_tag }}"
+      - name: Output pinned image tag
+        run: |
+          # choose the sha-* tag for Render
+          TAG=$(echo "${{ steps.meta_labels.outputs.tags }}" | tr ',' '\n' | grep '^ghcr.io/.*/sha-' | head -n1)
+          echo "image_sha_tag=$TAG" >> "$GITHUB_OUTPUT"
+        id: meta_out
 
   migrate_prod:
     needs: build_and_push_image
     runs-on: ubuntu-latest
     environment:
-      name: production           # create "production" env in GitHub → add Required reviewers + DATABASE_URL
+      name: production
       url: https://api.cineschedule.com
+    env:
+      PRISMA_HIDE_UPDATE_MESSAGE: "1"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Use Node 20.x
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      - name: Install (dev) to pin Prisma CLI version
+      - name: Install (pin Prisma CLI version)
         run: npm ci
-        env:
-          PRISMA_HIDE_UPDATE_MESSAGE: "1"
 
       - name: Run Prisma migrate on PROD
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}   # put this secret in the "production" environment
-          PRISMA_HIDE_UPDATE_MESSAGE: "1"
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}   # set this on the "production" environment
         run: npx prisma migrate deploy --schema=./prisma/schema.prisma
 
   deploy_to_render:
@@ -81,9 +114,9 @@ jobs:
     steps:
       - name: Trigger Render deploy with pinned imageUrl
         env:
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}     # repo secret
-          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }} # repo secret
-          IMAGE_SHA_TAG: ${{ needs.build_and_push_image.outputs.image_sha_tag }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          IMAGE_SHA_TAG: ${{ needs.build_and_push_image.outputs.image_sha_tag || needs.build_and_push_image.outputs.image_sha_tag }}
         run: |
           JSON_PAYLOAD=$(printf '{"imageUrl":"%s"}' "$IMAGE_SHA_TAG")
           echo "Deploying image: $IMAGE_SHA_TAG"
@@ -96,12 +129,29 @@ jobs:
             -o /tmp/render-body.json \
             -w "\nHTTP_STATUS=%{http_code}\n" \
             "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" | tee /tmp/render-status.txt
+
           echo "--- Render response body ---"
           cat /tmp/render-body.json
           echo "--- Render response status ---"
-          grep HTTP_STATUS /tmp/render-status.txt | sed 's/HTTP_STATUS=//'
           STATUS=$(grep HTTP_STATUS /tmp/render-status.txt | sed 's/HTTP_STATUS=//')
+          echo "$STATUS"
+
           if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 300 ]; then
             echo "Render deploy failed with status $STATUS"
             exit 1
           fi
+
+      - name: Smoke check
+        env:
+          HEALTH_URL: ${{ secrets.RENDER_HEALTH_URL }} # e.g., https://api.cineschedule.com/v1/health
+        run: |
+          for i in {1..20}; do
+            echo "Health attempt $i..."
+            if curl -fsS "$HEALTH_URL" | jq -e '.ok == true' >/dev/null; then
+              echo "Healthy ✅"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Service not healthy after timeout"
+          exit 1
