@@ -16,7 +16,7 @@ jobs:
       contents: read
       packages: write
     outputs:
-      image_sha_tag: ${{ steps.meta.outputs.image_sha_tag }}
+      image_sha_tag: ${{ steps.set_out.outputs.image_sha_tag }}
     env:
       PRISMA_HIDE_UPDATE_MESSAGE: "1"
       NODE_ENV: production
@@ -79,14 +79,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
-
-
-      - name: Output pinned image tag
-        run: |
-          # choose the sha-* tag for Render
-          TAG=$(echo "${{ steps.meta_labels.outputs.tags }}" | tr ',' '\n' | grep '^ghcr.io/.*/sha-' | head -n1)
-          echo "image_sha_tag=$TAG" >> "$GITHUB_OUTPUT"
-        id: meta_out
+      
+      # Emit a stable output for downstream jobs without parsing metadata
+      - name: Set pinned image tag output
+        id: set_out
+        run: echo "image_sha_tag=ghcr.io/${{ github.repository }}:sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
   migrate_prod:
     needs: build_and_push_image
@@ -123,10 +120,10 @@ jobs:
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
-          IMAGE_SHA_TAG: ${{ needs.build_and_push_image.outputs.image_sha_tag || needs.build_and_push_image.outputs.image_sha_tag }}
+          IMAGE_SHA_TAG: ${{ needs.build_and_push_image.outputs.image_sha_tag }}   # <- this will be non-empty now
         run: |
-          JSON_PAYLOAD=$(printf '{"imageUrl":"%s"}' "$IMAGE_SHA_TAG")
           echo "Deploying image: $IMAGE_SHA_TAG"
+          JSON_PAYLOAD=$(printf '{"imageUrl":"%s"}' "$IMAGE_SHA_TAG")
           set -o pipefail
           curl -sS -D >(tee /tmp/render-headers.txt) \
             -H "Accept: application/json" \
@@ -142,7 +139,6 @@ jobs:
           echo "--- Render response status ---"
           STATUS=$(grep HTTP_STATUS /tmp/render-status.txt | sed 's/HTTP_STATUS=//')
           echo "$STATUS"
-
           if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 300 ]; then
             echo "Render deploy failed with status $STATUS"
             exit 1
