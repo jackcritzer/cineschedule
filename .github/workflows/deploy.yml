@@ -58,6 +58,14 @@ jobs:
             org.opencontainers.image.title=CineSchedule API
             org.opencontainers.image.created=${{ github.run_id }}
 
+      - name: Set up Docker Buildx (container driver)
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          install: true
+          driver: docker-container
+          driver-opts: image=moby/buildkit:latest
+
       - name: Build & push image (with cache)
         id: meta
         uses: docker/build-push-action@v6
@@ -65,14 +73,13 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64
+          builder: ${{ steps.buildx.outputs.name }}   # 👈 use the container driver
           tags: ${{ steps.meta_labels.outputs.tags }}
           labels: ${{ steps.meta_labels.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # If your Dockerfile has multi-stage, specify target: production
-          # target: production
-          # some orgs disable provenance; set to false if you hit policy errors
           provenance: false
+
 
       - name: Output pinned image tag
         run: |
