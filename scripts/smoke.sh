@@ -85,8 +85,9 @@ log "Watchlist: add by :titleId (idempotent)"
 ADD_RESP="$(curl -sS -w '\n%{http_code}\n' -H "Authorization: Bearer $TOKEN" -X POST "$WATCHLIST_BASE/watchlist/$TITLE_ID")"
 ADD_BODY="$(echo "$ADD_RESP" | head -n1)"
 ADD_CODE="$(echo "$ADD_RESP" | tail -n1)"
+log "$ADD_BODY $ADD_CODE"
 [[ "$ADD_CODE" == "200" || "$ADD_CODE" == "201" ]] || { echo "$ADD_BODY"; fail "Unexpected status $ADD_CODE on add"; }
-WL_ID="$(echo "$ADD_BODY" | jq -r '.id' 2>/dev/null || true)"
+WL_ID="$(echo "$ADD_BODY" | jq -r '.watchlist.id' 2>/dev/null || true)"
 [[ -n "${WL_ID:-}" && "$WL_ID" != "null" ]] || fail "No watchlist id"
 ok "Watchlist add OK ($ADD_CODE)"
 
@@ -106,7 +107,7 @@ ok "Calendar OK"
 
 # ===== 6) Auth errors (unversioned) =====
 log "Auth: expect AUTH_* without token"
-curl_json GET "$CAL_LATEST?from=$FROM" | jq -e '.error.code == "AUTH_MISSING" or .error.code == "AUTH_TOKEN_INVALID" or .error.code == "AUTH_TOKEN_EXPIRED"' >/dev/null 2>&1 || true
+curl_json GET "$CAL_LATEST?from=$FROM" "" "$TOKEN"| jq -e '.error.code == "AUTH_MISSING" or .error.code == "AUTH_TOKEN_INVALID" or .error.code == "AUTH_TOKEN_EXPIRED"' >/dev/null 2>&1 || true
 ok "Auth error path OK (calendar without token)"
 
 printf "\n\033[1;32mALL SMOKE TESTS PASSED ✅\033[0m\n"

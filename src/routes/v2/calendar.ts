@@ -1,11 +1,8 @@
 import { Router } from "express";
-import { z } from 'zod';
-import { prisma } from '../../db/client';
+import { z } from "zod";
+
 import {
 	CalendarQuerySchema,
-	DEFAULT_REGION,
-	TMDB_API_KEY,
-	TTLCache,
 	cursorKey,
 	decodeCursor,
 	deterministicId,
@@ -14,14 +11,15 @@ import {
 	toSlug,
 	cmpCursorKey,
 	type ReleaseType,
-    apiToDbReleaseType,
+	apiToDbReleaseType,
 	dbToApiReleaseType,
-	extractProviderIdsFromProvidersJson,
 } from "./helpers";
 
-import { requireAuth } from '../../middleware/auth';
-import { asyncHandler } from '../../middleware/asyncHandler';
-import { validate, getValidated } from '../../middleware/validate';
+import { prisma } from "../../db/client";
+import { asyncHandler } from "../../middleware/asyncHandler";
+import { pickProviderBadges, type Provider as BadgeProvider } from "../../lib/tmdb";
+import { requireAuth } from "../../middleware/auth";
+import { validate, getValidated } from "../../middleware/validate";
 
 export type ProviderInfo = { id: number; name: string; slug: string; logoPath?: string | null };
 export type CalendarItem = {
@@ -35,83 +33,40 @@ export type CalendarItem = {
 };
 export type CalendarResponse = { items: CalendarItem[]; nextCursor?: string | null };
 
-// --- Provider directory cache (24h) ---
-const providerDirCache = new TTLCache<Map<number, ProviderInfo>>(24 * 60 * 60 * 1000);
-
-async function getProviderDirectory(): Promise<Map<number, ProviderInfo>> {
-	const cacheKey = "tmdb:providerDir";
-	const hit = providerDirCache.get(cacheKey);
-	if (hit) return hit;
-
-	// Use the "watch/providers/movie" endpoint as a directory for IDs -> names/logos
-	const url = new URL("https://api.themoviedb.org/3/watch/providers/movie");
-	url.searchParams.set("api_key", TMDB_API_KEY!);
-	url.searchParams.set("watch_region", DEFAULT_REGION);
-
-	const res = await fetch(url.toString());
-	if (!res.ok) {
-		const t = await res.text().catch(() => "");
-		throw new Error(`TMDB providers ${res.status}: ${t || res.statusText}`);
-	}
-	const json = await res.json();
-	const map = new Map<number, ProviderInfo>();
-	for (const p of json.results as Array<{ provider_id: number; provider_name: string; logo_path?: string }>) {
-		map.set(p.provider_id, {
-			id: p.provider_id,
-			name: p.provider_name,
-			slug: toSlug(p.provider_name),
-			logoPath: p.logo_path || null,
-		});
-	}
-	providerDirCache.set(cacheKey, map);
-	return map;
-}
-
-// --- Repo hooks (wire to Prisma/your data). For now, a placeholder returning an empty list. ---
-// Expected output shape from your data layer BEFORE provider mapping:
 type RawCal = {
 	titleId: number;
 	title: string;
 	type: ReleaseType;
 	date: string; // YYYY-MM-DD
 	region: string;
-	providerIds?: number[]; // for streaming/digital; may be empty/undefined for theatrical
+	// We will derive providers from title.providersJson instead of passing IDs here
 };
 
-// Replace this with a Prisma query pulling releases in [from,to] for the user's watchlist.
+const router = Router();
+
+// Pull releases in [from,to] for user's watchlist.
+// NOTE: We no longer rely on providerIds in the raw row; we compute providers from providersJson below.
 async function fetchUserCalendarRaw(
 	userId: number,
-	args: { from?: Date; to?: Date; type?: ReleaseType; region: string }
+	args: { from?: Date | undefined; to?: Date | undefined; type?: ReleaseType | undefined; region: string }
 ): Promise<RawCal[]> {
-	// Build where clause for ReleaseEvent
 	const where: any = {
-		// Only titles the user follows
-		title: {
-			watchlist: {
-				some: { userId },
-			},
-		},
-		// Region filter (= ReleaseEvent.country). If null in DB, we let it pass only when no region set.
-		// Since your API always provides a region, we match exact code.
-		country: args.region,
+		title: { watchlist: { some: { userId } } },
+		country: args.region, // exact ISO-2 match
 	};
 
-	// Date range
 	if (args.from || args.to) {
 		where.date = {};
 		if (args.from) where.date.gte = args.from;
 		if (args.to) where.date.lte = args.to;
 	}
 
-	// Type filter (map API -> DB enum)
 	if (args.type) {
 		where.type = apiToDbReleaseType(args.type);
 	} else {
-		// restrict to the three user-facing types (omit PHYSICAL)
 		where.type = { in: ["THEATRICAL", "DIGITAL", "STREAMING"] };
 	}
 
-	// Query: pull ReleaseEvents joined with Title (for name + providersJson)
 	const rows = await prisma.releaseEvent.findMany({
 		where,
 		orderBy: [{ date: "asc" }, { titleId: "asc" }, { type: "asc" }],
@@ -123,97 +78,85 @@ async function fetchUserCalendarRaw(
 			title: {
 				select: {
 					name: true,
-					providersJson: true,
+					providersJson: true,  // ✅ we’ll derive providers from this
+					networksJson: true,   // (kept available if you add “networks” later)
 				},
 			},
 		},
 	});
 
-	// Map to RawCal[]
 	const out: RawCal[] = [];
-
 	for (const r of rows) {
 		const apiType = dbToApiReleaseType(r.type as any);
-        if (!apiType) continue; // skip PHYSICAL
+		if (!apiType) continue; // skip PHYSICAL
 
-        const yyyyMmDd = r.date.toISOString().slice(0, 10);
-
-        // Provider IDs only for streaming/digital
-        let providerIds: number[] = [];
-        if (apiType === "streaming" || apiType === "digital") {
-            providerIds = extractProviderIdsFromProvidersJson(r.title.providersJson, args.region) ?? [];
-        }
-
-        // Build base object and only include providerIds if non-empty
-        const base = {
-            titleId: r.titleId,
-            title: r.title.name,
-            type: apiType,
-            date: yyyyMmDd,
-            region: r.country ?? args.region,
-        };
-
-        const rc: RawCal = {
-            ...base,
-            ...(providerIds.length > 0 ? { providerIds } : {}),
-        };
-
-        out.push(rc);
+		out.push({
+			titleId: r.titleId,
+			title: r.title.name,
+			type: apiType,
+			date: r.date.toISOString().slice(0, 10),
+			region: r.country ?? args.region,
+		});
 	}
-
 	return out;
 }
-
-const router = Router();
 
 router.get(
     "/",
     requireAuth,
     validate('query', CalendarQuerySchema),
     asyncHandler(async (req: any, res) => {
-        const userId: number = req.user.id;
+		const userId: number = req.user.id;
 
 		const { from, to, limit, type, providerIds, region, cursor } = getValidated<z.infer<typeof CalendarQuerySchema>>(req, 'query');
+
 		const filterProviderIds = parseProviderIds(providerIds);
 
-        const base = {
-            from,
-            region
-        }
-        
-        // only include to and type if they are defined
-        const args = {
-            ...base,
-            ...(to ? { to } : {}),
-            ...(type ? { type } : {}),
-        };
+		// Load raw release rows
+		const raw = await fetchUserCalendarRaw(userId, { from, to, type, region });
 
-		// Load raw calendar rows
-		const raw = await fetchUserCalendarRaw(userId, args);
+		// Fetch providersJson for all titles in one go to minimize queries
+		const titleIds = Array.from(new Set(raw.map((r) => r.titleId)));
+		const titleProviders = await prisma.title.findMany({
+			where: { id: { in: titleIds } },
+			select: { id: true, providersJson: true },
+		});
+		const providersByTitleId = new Map<number, any>(
+			titleProviders.map((t) => [t.id, t.providersJson])
+		);
 
-		// Provider mapping (only if providerIds present on the row)
-		const dir = await getProviderDirectory();
-		function mapProviders(ids?: number[]): ProviderInfo[] | undefined {
-			if (!ids || ids.length === 0) return undefined;
-			const infos: ProviderInfo[] = [];
-			for (const id of ids) {
-				const p = dir.get(id);
-				if (p) infos.push(p);
-			}
-			return infos.length ? infos : undefined;
+		// Build CalendarItem list using pickProviderBadges()
+		function toProviderInfos(badges: BadgeProvider[]): ProviderInfo[] {
+			return badges.map((p) => ({
+				id: p.id,
+				name: p.name,
+				slug: toSlug(p.name),
+				logoPath: p.logoPath ?? null,
+			}));
 		}
 
-		let items: CalendarItem[] = raw.map((r) => ({
-			id: deterministicId([r.titleId, r.date, r.type, r.region, (r.providerIds || []).join("-")]),
-			titleId: r.titleId,
-			title: r.title,
-			type: r.type,
-			date: r.date,
-			providers: mapProviders(r.providerIds),
-			region: r.region,
-		} as CalendarItem));
+		let items: CalendarItem[] = raw.map((r) => {
+			// Only attach providers for streaming/digital (as in v2 spec)
+			let providers: ProviderInfo[] | undefined = undefined;
+			if (r.type === "streaming" || r.type === "digital") {
+				const pj = providersByTitleId.get(r.titleId);
+				// ✅ Reuse your prioritization (flatrate → free → ads → rent → buy), max 4
+				const badges = pickProviderBadges(pj, region, 4); // returns {id,name,logoPath}
+				if (badges.length) providers = toProviderInfos(badges);
+			}
 
-		// Provider filtering (applies to streaming/digital rows with providers)
+			return {
+				id: deterministicId([r.titleId, r.date, r.type, r.region, providers?.map(p => p.id).join("-")]),
+				titleId: r.titleId,
+				title: r.title,
+				type: r.type,
+				date: r.date,
+				providers,
+				region: r.region,
+			} as CalendarItem;
+		});
+
+		// Provider filtering against selected provider IDs
 		if (filterProviderIds.length > 0) {
 			const wanted = new Set(filterProviderIds);
 			items = items.filter((it) => {
@@ -222,7 +165,7 @@ router.get(
 			});
 		}
 
-		// Sort for stable cursoring: date ASC, titleId ASC, type ASC
+		// Stable sort for cursoring
 		items.sort((a, b) => {
 			const ak = cursorKey(a.date, a.titleId, a.type);
 			const bk = cursorKey(b.date, b.titleId, b.type);
@@ -233,30 +176,24 @@ router.get(
 		const startKey = decodeCursor(cursor)?.k;
 		let startIdx = 0;
 		if (startKey) {
-			// find first item strictly greater than cursor key
 			startIdx = items.findIndex((it) => cmpCursorKey(cursorKey(it.date, it.titleId, it.type), startKey) > 0);
-			if (startIdx < 0) startIdx = items.length; // cursor beyond end
+			if (startIdx < 0) startIdx = items.length;
 		}
 
 		const page = items.slice(startIdx, startIdx + limit + 1);
 		let nextCursor: string | null = null;
-        let pageItems = page;
+		let pageItems = page;
 
-        if (page.length > limit) {
-            const lastIdx = Math.min(limit - 1, page.length - 1);
-            const last = page[lastIdx];
-            if (last) {
-                nextCursor = encodeCursor({ k: cursorKey(last.date, last.titleId, last.type) });
-            }
-            pageItems = page.slice(0, limit);
-        }
+		if (page.length > limit) {
+			const lastIdx = Math.min(limit - 1, page.length - 1);
+			const last = page[lastIdx];
+			if (last) nextCursor = encodeCursor({ k: cursorKey(last.date, last.titleId, last.type) });
+			pageItems = page.slice(0, limit);
+		}
 
-		const resp: CalendarResponse = {
-			items: pageItems,
-			nextCursor,
-		};
+		const resp: CalendarResponse = { items: pageItems, nextCursor };
 		return res.json(resp);
-    })
+	})
 );
 
 export default router;
