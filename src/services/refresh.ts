@@ -41,7 +41,7 @@ export async function refreshTitleData(titleId: number) {
 export async function refreshMovie(titleId: number):Promise<{ kind: TitleType; reason?: string; insertedOrUpdated?: number }> {
     const title = await prisma.title.findUnique({ where: { id: titleId }, select: { id: true, tmdbId: true, type: true, name: true } });
     if (!title) throw new Error(`Title ${titleId} not found`);
-    if (title.type !== TitleType.TV) {
+    if (title.type !== TitleType.MOVIE) {
         throw new Error(`Title ${titleId} is not TV (type=${title.type})`);
     }
     if (!title.tmdbId) throw new Error(`Title ${titleId} missing tmdbId`);

@@ -1,8 +1,8 @@
 import { Router } from 'express';
 
-import { prisma } from '../db/client';
-import { ApiError } from '../errors';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { prisma } from '../../db/client';
+import { ApiError } from '../../errors';
+import { asyncHandler } from '../../middleware/asyncHandler';
 
 const router = Router();
 

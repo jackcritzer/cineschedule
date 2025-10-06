@@ -1,11 +1,11 @@
 import { Router } from 'express';
-import authRoutes from '../../routes/auth';
-import healthRoutes from '../../routes/health';
-import titlesRoutes from '../../routes/titles';
-import watchlistRoutes from '../../routes/watchlist';
-import tmdbRoutes from '../../routes/tmdb';
-import titlesRefreshRouter from '../../routes/titles.refresh';
-import calendarRouter from '../../routes/calendar';
+import authRoutes from './auth';
+import healthRoutes from './health';
+import titlesRoutes from './titles';
+import watchlistRoutes from './watchlist';
+import tmdbRoutes from './tmdb';
+import titlesRefreshRouter from './titles.refresh';
+import calendarRouter from './calendar';
 
 const v1 = Router();
 

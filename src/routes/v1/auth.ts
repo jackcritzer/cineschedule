@@ -1,12 +1,12 @@
 import { Router } from 'express';
-import { prisma } from '../db/client';
+import { prisma } from '../../db/client';
 import { z } from 'zod';
-import { asyncHandler } from '../middleware/asyncHandler';
-import { hashPassword, verifyPassword } from '../utils/hash';
-import { signJwt } from '../utils/jwt';
-import { validate } from '../middleware/validate';
-import { ApiError } from '../errors';
-import { requireAuth } from '../middleware/auth';
+import { asyncHandler } from '../../middleware/asyncHandler';
+import { hashPassword, verifyPassword } from '../../utils/hash';
+import { signJwt } from '../../utils/jwt';
+import { validate } from '../../middleware/validate';
+import { ApiError } from '../../errors';
+import { requireAuth } from '../../middleware/auth';
 
 const router = Router();
 
