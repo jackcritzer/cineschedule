@@ -25,7 +25,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Optional: sanity check the repo builds & Prisma client generates
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -44,21 +43,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker metadata
-        id: meta_labels
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=raw,value=sha-${{ github.sha || github.event.pull_request.head.sha }}
-            type=raw,value=main
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.title=CineSchedule API
-            org.opencontainers.image.created=${{ github.run_id }}
-
-      - name: Set up Docker Buildx (container driver)
+      - name: Set up Docker Buildx
         id: buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -66,24 +51,39 @@ jobs:
           driver: docker-container
           driver-opts: image=moby/buildkit:latest
 
-      - name: Build & push image (with cache)
-        id: meta
+      # 🧩 NEW STEP: Generate tags + labels automatically
+      - name: Extract Docker metadata (tags + labels)
+        id: meta_labels
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,prefix=sha-
+            type=ref,event=branch
+          labels: |
+            org.opencontainers.image.title=CineSchedule API
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=CineSchedule backend service (Express + Prisma)
+            org.opencontainers.image.licenses=MIT
+
+      - name: Build & push image
         uses: docker/build-push-action@v6
         with:
           context: .
+          builder: ${{ steps.buildx.outputs.name }}
           push: true
           platforms: linux/amd64
-          builder: ${{ steps.buildx.outputs.name }}   # 👈 use the container driver
           tags: ${{ steps.meta_labels.outputs.tags }}
           labels: ${{ steps.meta_labels.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
-      
-      # Emit a stable output for downstream jobs without parsing metadata
+
       - name: Set pinned image tag output
         id: set_out
-        run: echo "image_sha_tag=ghcr.io/${{ github.repository }}:sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+        run: echo "image_sha_tag=$(echo '${{ steps.meta_labels.outputs.tags }}' | head -n1)" >> "$GITHUB_OUTPUT"
+
 
   migrate_prod:
     needs: build_and_push_image
