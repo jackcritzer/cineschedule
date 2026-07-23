@@ -9,6 +9,12 @@ import { errorHandler } from './middleware/errorHandler';
 import { addVersionHeaders } from './middleware/versionHeaders';
 import { corsMiddleware } from "./middleware/cors";
 //import { logRequest } from './middleware/logRequest';
+import authRoutes from './routes/v1/auth';
+import tmdbRoutes from './routes/v1/tmdb';
+import titlesRoutes from './routes/v1/titles';
+import titlesRefreshRouter from './routes/v1/titles.refresh';
+import watchlistRoutes from './routes/v1/watchlist';
+import calendarRouter from './routes/v1/calendar';
 import v2CalendarRouter from "./routes/v2/calendar";
 import v2SearchRouter from "./routes/v2/search";
 
@@ -26,7 +32,7 @@ app.use(
   	'/v1',
 	addVersionHeaders('v1', {
 			deprecate: true,
-			sunsetGMT: 'Wed, 01 Apr 2026 00:00:00 GMT',
+			sunsetGMT: 'Fri, 31 Jul 2026 00:00:00 GMT',
 			successor: '/v2',
 	}),
   	v1Router
@@ -36,6 +42,13 @@ app.use(
 app.use('/v2', addVersionHeaders('v2'), v2Router);
 
 // === LATEST ALIASES (point to newest implementation) ===
+app.use('/auth', authRoutes);
+app.use('/tmdb', tmdbRoutes);
+app.use('/titles', titlesRoutes);
+app.use('/titles', titlesRefreshRouter);
+app.use('/watchlist', watchlistRoutes);
+app.use('/calendar', calendarRouter);
+
 app.use("/calendar", v2CalendarRouter);
 app.use("/search", v2SearchRouter);
 

@@ -19,11 +19,13 @@ import { searchTmdb } from "../../lib/tmdb";
 
 export type SearchResult = {
 	tmdbId: number;
-	titleType: ApiTitleType;
+	type: ApiTitleType;
 	name: string;
+	releaseDate?: string | null;
 	year?: number | null;
 	posterPath?: string | null;
 	isInWatchlist: boolean;
+	overview?: string | null;
 };
 export type SearchResponse = {
 	results: SearchResult[];
@@ -43,16 +45,16 @@ const comboCache = new TTLCache<{
 
 async function batchIsInWatchlist(
 	userId: number,
-	items: Array<{ tmdbId: number; titleType: ApiTitleType }>
+	items: Array<{ tmdbId: number; type: ApiTitleType }>
 ): Promise<Set<string>> {
 	if (items.length === 0) return new Set();
 
-	const dedup = Array.from(new Map(items.map(i => [`${i.titleType}:${i.tmdbId}`, i])).values());
+	const dedup = Array.from(new Map(items.map(i => [`${i.type}:${i.tmdbId}`, i])).values());
 	const titles = await prisma.title.findMany({
 		where: {
 			OR: dedup.map((i) => ({
 				tmdbId: i.tmdbId,
-				type: apiToDbTitleType(i.titleType),
+				type: apiToDbTitleType(i.type),
 			})),
 		},
 		select: { id: true, tmdbId: true, type: true },
@@ -102,20 +104,24 @@ router.get(
 		// Map to the lean shape
 		const movieResults: SearchResult[] = (movieJson.results ?? []).map((m: any) => ({
 			tmdbId: m.tmdbId,
-			titleType: titleTypeToAPI("MOVIE"),
+			type: titleTypeToAPI("MOVIE"),
 			name: m.name,
+			releaseDate: m.releaseDate ?? null,
 			year: m.releaseDate ? Number(String(m.releaseDate).slice(0, 4)) : null,
 			posterPath: m.posterPath ?? null,
 			isInWatchlist: false,
+			overview: m.overview ?? null,
 		}));
 
 		const tvResults: SearchResult[] = (tvJson.results ?? []).map((t: any) => ({
 			tmdbId: t.tmdbId,
-			titleType: titleTypeToAPI("TV"),
+			type: titleTypeToAPI("TV"),
 			name: t.name,
+			releaseDate: t.releaseDate ?? null,
 			year: t.releaseDate ? Number(String(t.releaseDate).slice(0, 4)) : null,
 			posterPath: t.posterPath ?? null,
 			isInWatchlist: false,
+			overview: t.overview ?? null,
 		}));
 
 		const combined = [...movieResults, ...tvResults];
@@ -123,10 +129,10 @@ router.get(
 		// Watchlist flags
 		const keySet = await batchIsInWatchlist(
 			userId,
-			combined.map((r) => ({ tmdbId: r.tmdbId, titleType: r.titleType }))
+			combined.map((r) => ({ tmdbId: r.tmdbId, type: r.type }))
 		);
 		for (const r of combined) {
-			r.isInWatchlist = keySet.has(`${r.titleType}:${r.tmdbId}`);
+			r.isInWatchlist = keySet.has(`${r.type}:${r.tmdbId}`);
 		}
 
 		const resp: SearchResponse = {

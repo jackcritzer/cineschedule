@@ -16,6 +16,6 @@ v1.use('/tmdb', tmdbRoutes);
 v1.use('/titles', titlesRoutes);
 v1.use('/titles', titlesRefreshRouter);
 v1.use('/watchlist', watchlistRoutes);
-v1.use('/calendar', calendarRouter)
+v1.use('/calendar', calendarRouter);
 
 export default v1;
