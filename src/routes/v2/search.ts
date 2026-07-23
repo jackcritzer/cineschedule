@@ -21,11 +21,11 @@ export type SearchResult = {
 	tmdbId: number;
 	type: ApiTitleType;
 	name: string;
-	releaseDate?: string | null;
-	year?: number | null;
-	posterPath?: string | null;
+	releaseDate: string | null;
+	year: number | null;
+	posterPath: string | null;
 	isInWatchlist: boolean;
-	overview?: string | null;
+	overview: string | null;
 };
 export type SearchResponse = {
 	results: SearchResult[];
