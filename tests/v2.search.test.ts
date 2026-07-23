@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import request from "supertest";
+import { ApiTitleType, SearchResponse, TmdbSearchResponse } from "../src/types/search";
 
 // Mock prisma
 vi.mock("../src/db/client", async () => {
@@ -27,20 +28,11 @@ import searchRouter from "../src/routes/v2/search";
 import { __seed } from "./mocks/prisma";
 
 // Mock lib/tmdb.searchTmdb with a typed spy
-type SearchTmdbFn = (query: string, type: "MOVIE" | "TV", page?: number) => Promise<{
-	page: number;
-	totalPages: number;
-	totalResults: number;
-	results: Array<{
-		tmdbId: number;
-		type: "MOVIE" | "TV";
-		name: string;
-		releaseDate: string | null;
-		posterPath: string | null;
-		overview: string | null;
-		popularity: number | null;
-	}>;
-}>;
+type SearchTmdbFn = (
+    query: string,
+    type: ApiTitleType,
+    page?: number
+) => Promise<TmdbSearchResponse>;
 
 const searchTmdbSpy = vi.fn<SearchTmdbFn>();
 
@@ -51,22 +43,6 @@ vi.mock("../src/lib/tmdb", async (importOriginal) => {
 		searchTmdb: (...args: Parameters<SearchTmdbFn>) => searchTmdbSpy(...args),
 	};
 });
-
-type SearchResult = {
-	titleType: any;
-	tmdbId: number;
-	name: string;
-	year?: number | null;
-	posterPath?: string | null;
-	isInWatchlist: boolean;
-};
-
-type SearchResponse = {
-	results: SearchResult[];
-	page: number;
-	totalPages: number;
-	totalResults: number;
-};
 
 describe("/v2/search", () => {
 	beforeEach(() => {
@@ -142,10 +118,10 @@ describe("/v2/search", () => {
 		expect(Array.isArray(body1.results)).toBe(true);
 		expect(body1.results.length).toBe(3);
 
-		const flags = Object.fromEntries(body1.results.map((r) => [`${r.titleType}:${r.tmdbId}`, r.isInWatchlist]));
-		expect(flags["movie:1"]).toBe(true);
-		expect(flags["tv:2"]).toBe(false);
-		expect(flags["movie:11"]).toBe(false);
+		const flags = Object.fromEntries(body1.results.map((r) => [`${r.type}:${r.tmdbId}`, r.isInWatchlist]));
+		expect(flags["MOVIE:1"]).toBe(true);
+		expect(flags["TV:2"]).toBe(false);
+		expect(flags["MOVIE:11"]).toBe(false);
 
 		// totalPages = max(3, 4) = 4
 		expect(body1.totalPages).toBe(4);

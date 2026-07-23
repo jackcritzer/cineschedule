@@ -3,8 +3,7 @@ import { z } from "zod";
 
 import { ReleaseType, TitleType } from "@prisma/client";
 
-export type ApiTitleType = "MOVIE" | "TV";
-export type ApiReleaseType = "theatrical" | "digital" | "streaming";
+import { ApiTitleType, ApiReleaseType } from "../../types/search";
 
 export const DEFAULT_REGION = (process.env.DEFAULT_REGION || "US").toUpperCase();
 export const TMDB_API_KEY = process.env.TMDB_API_KEY;

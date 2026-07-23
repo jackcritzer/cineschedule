@@ -3,7 +3,6 @@ import { Router } from "express";
 import { z } from "zod";
 
 import {
-	ApiTitleType,
 	SearchQuerySchema,
 	TTLCache,
 	apiToDbTitleType,
@@ -16,23 +15,7 @@ import { validate, getValidated } from "../../middleware/validate";
 import { prisma } from "../../db/client";
 
 import { searchTmdb } from "../../lib/tmdb";
-
-export type SearchResult = {
-	tmdbId: number;
-	type: ApiTitleType;
-	name: string;
-	releaseDate: string | null;
-	year: number | null;
-	posterPath: string | null;
-	isInWatchlist: boolean;
-	overview: string | null;
-};
-export type SearchResponse = {
-	results: SearchResult[];
-	page: number;
-	totalPages: number;
-	totalResults: number;
-};
+import { ApiTitleType, SearchResult, SearchResponse } from "../../types/search";
 
 const router = Router();
 
@@ -111,6 +94,7 @@ router.get(
 			posterPath: m.posterPath ?? null,
 			isInWatchlist: false,
 			overview: m.overview ?? null,
+			popularity: m.popularity ?? null,
 		}));
 
 		const tvResults: SearchResult[] = (tvJson.results ?? []).map((t: any) => ({
@@ -122,6 +106,7 @@ router.get(
 			posterPath: t.posterPath ?? null,
 			isInWatchlist: false,
 			overview: t.overview ?? null,
+			popularity: t.popularity ?? null,
 		}));
 
 		const combined = [...movieResults, ...tvResults];
@@ -142,7 +127,7 @@ router.get(
 			totalPages: Math.max(movieJson.totalPages ?? 1, tvJson.totalPages ?? 1),
 			totalResults: (movieJson.totalResults ?? 0) + (tvJson.totalResults ?? 0),
 		};
-
+		
 		res.json(resp);
 	})
 );
