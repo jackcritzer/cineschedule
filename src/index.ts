@@ -14,7 +14,6 @@ import tmdbRoutes from './routes/v1/tmdb';
 import titlesRoutes from './routes/v1/titles';
 import titlesRefreshRouter from './routes/v1/titles.refresh';
 import watchlistRoutes from './routes/v1/watchlist';
-import calendarRouter from './routes/v1/calendar';
 import v2CalendarRouter from "./routes/v2/calendar";
 import v2SearchRouter from "./routes/v2/search";
 
@@ -41,16 +40,16 @@ app.use(
 // v2 (current)
 app.use('/v2', addVersionHeaders('v2'), v2Router);
 
+
 // === LATEST ALIASES (point to newest implementation) ===
+
 app.use('/auth', authRoutes);
 app.use('/tmdb', tmdbRoutes);
 app.use('/titles', titlesRoutes);
 app.use('/titles', titlesRefreshRouter);
 app.use('/watchlist', watchlistRoutes);
-app.use('/calendar', calendarRouter);
-
-app.use("/calendar", v2CalendarRouter);
-app.use("/search", v2SearchRouter);
+app.use('/calendar', v2CalendarRouter);
+app.use('/search', v2SearchRouter);
 
 // Unversioned auth stays stable across API versions
 import authRouter from "./routes/v1/auth";
