@@ -13,9 +13,10 @@ import {
 	toSlug,
 	cmpCursorKey,
 	apiToDbReleaseType,
-	dbToApiReleaseType,
-	ApiReleaseType
+	dbToApiReleaseType
 } from "./helpers";
+
+import { ApiReleaseType } from "../../types/search";
 
 import { prisma } from "../../db/client";
 import { asyncHandler } from "../../middleware/asyncHandler";

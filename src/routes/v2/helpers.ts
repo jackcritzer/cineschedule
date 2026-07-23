@@ -3,8 +3,7 @@ import { z } from "zod";
 
 import { ReleaseType, TitleType } from "@prisma/client";
 
-export type ApiTitleType = "movie" | "tv";
-export type ApiReleaseType = "theatrical" | "digital" | "streaming";
+import { ApiTitleType, ApiReleaseType } from "../../types/search";
 
 export const DEFAULT_REGION = (process.env.DEFAULT_REGION || "US").toUpperCase();
 export const TMDB_API_KEY = process.env.TMDB_API_KEY;
@@ -163,14 +162,14 @@ export function dbToApiReleaseType(t: ReleaseType): ApiReleaseType | undefined {
  *
  */
 export function titleTypeToAPI(t: TitleType): ApiTitleType {
-	return t === "MOVIE" ? "movie" : "tv";
+	return t === "MOVIE" ? "MOVIE" : "TV";
 }
 
 /**
  *
  */
 export function apiToDbTitleType(t: ApiTitleType): TitleType {
-	return t === "movie" ? "MOVIE" : "TV";
+	return t === "MOVIE" ? "MOVIE" : "TV";
 }
 
 // === Provider extraction from Title.providersJson ===
