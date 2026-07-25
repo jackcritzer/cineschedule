@@ -18,11 +18,13 @@ export type SearchResult = TmdbSearchResult & {
 
 export type PaginatedResponse<T> = {
     results: T[];
-    page: number;
+    /* page: number;
     totalPages: number;
-    totalResults: number;
+    totalResults: number; */
 };
 
 export type TmdbSearchResponse = PaginatedResponse<TmdbSearchResult>;
 
-export type SearchResponse = PaginatedResponse<SearchResult>;
+export type SearchResponse = {
+    results: SearchResult[];
+};

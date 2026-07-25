@@ -1,5 +1,5 @@
 import fetch from 'node-fetch';
-import { TmdbSearchResponse, TmdbSearchResult } from '../types/search';
+import { ApiTitleType, TmdbSearchResponse, TmdbSearchResult } from '../types/search';
 
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 
@@ -111,12 +111,10 @@ export async function getTvWatchProviders(tmdbId: number) {
   	);
 }
 
-export type TmdbType = 'MOVIE' | 'TV';
-
 /**
  *
  */
-export async function fetchTmdbTitle(tmdbId: number, type: TmdbType) {
+export async function fetchTmdbTitle(tmdbId: number, type: ApiTitleType): Promise<TmdbSearchResult> {
 	const path = type === "MOVIE" ? `/movie/${tmdbId}` : `/tv/${tmdbId}`;
 
 	// Keep your original params/locale behavior
@@ -124,22 +122,26 @@ export async function fetchTmdbTitle(tmdbId: number, type: TmdbType) {
 
 	const name = type === "MOVIE" ? json.title : json.name;
 	const dateStr = type === "MOVIE" ? json.release_date : json.first_air_date;
-	const releaseDate = dateStr ? new Date(dateStr) : undefined;
+	const releaseDate = dateStr ? String(dateStr).slice(0, 10) : null;
+	const posterPath = json.poster_path ?? null;
+	const overview = json.overview ?? null;
+	const popularity = json.popularity ?? null;
 
 	return {
 		tmdbId,
 		type,
 		name,
 		releaseDate,
-		posterPath: json.poster_path ?? null,
-		overview: json.overview ?? null,
-  };
-}
+		posterPath,
+		overview,
+		popularity,
+	};
+};
 
 /**
  *
  */
-export async function searchTmdb(query: string, type: TmdbType, page = 1): Promise<TmdbSearchResponse> {
+export async function searchTmdb(query: string, type: ApiTitleType, page = 1): Promise<TmdbSearchResponse> {
     const endpoint = type === "MOVIE" ? "/search/movie" : "/search/tv";
 
     const json: any = await tmdbGet(endpoint, {
@@ -170,6 +172,52 @@ export async function searchTmdb(query: string, type: TmdbType, page = 1): Promi
 			totalResults: json.total_results ?? results.length,
 			results,
   	} as TmdbSearchResponse;
+}
+
+export async function searchTmdbTitles(
+	query: string,
+	page = 1
+): Promise<TmdbSearchResponse> {
+	const json: any = await tmdbGet("/search/multi", {
+		language: "en-US",
+		include_adult: "false",
+		page,
+		query: query.trim(),
+	});
+
+	const results: TmdbSearchResult[] = (json.results ?? [])
+		.filter(
+			(result: any) =>
+				result.media_type === "movie" ||
+				result.media_type === "tv"
+		)
+		.map((result: any) => {
+			// Map TMDB's media_type to our TmdbType
+			const type: ApiTitleType =
+				result.media_type === "movie" ? "MOVIE" : "TV";
+
+			const name =
+				type === "MOVIE" ? result.title : result.name;
+
+			const releaseDate =
+				type === "MOVIE"
+					? result.release_date
+					: result.first_air_date;
+
+			return {
+				tmdbId: result.id as number,
+				type,
+				name,
+				releaseDate: releaseDate || null,
+				posterPath: result.poster_path ?? null,
+				overview: result.overview ?? null,
+				popularity: result.popularity ?? null,
+			} as TmdbSearchResult;
+		});
+
+	return {
+		results
+	};
 }
 
 /**

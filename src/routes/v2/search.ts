@@ -14,8 +14,8 @@ import { asyncHandler } from "../../middleware/asyncHandler";
 import { validate, getValidated } from "../../middleware/validate";
 import { prisma } from "../../db/client";
 
-import { searchTmdb } from "../../lib/tmdb";
-import { ApiTitleType, SearchResult, SearchResponse } from "../../types/search";
+import { searchTmdbTitles } from "../../lib/tmdb";
+import { ApiTitleType, SearchResult, SearchResponse, TmdbSearchResponse } from "../../types/search";
 
 const router = Router();
 
@@ -25,6 +25,7 @@ const comboCache = new TTLCache<{
 	tv: any;
 }>(90 * 1000);
 
+const searchCache = new TTLCache<TmdbSearchResponse>(90 * 1000);
 
 async function batchIsInWatchlist(
 	userId: number,
@@ -68,64 +69,37 @@ router.get(
 
 		// Try cache
 		const key = comboCache.key(["q", query.trim(), "p", page, "r", region]);
-		let movieJson: any;
-		let tvJson: any;
+		let searchResults;
 
-		const cached = comboCache.get(key);
+		const cached = searchCache.get(key);
+
 		if (cached) {
-			movieJson = cached.movie;
-			tvJson = cached.tv;
+			searchResults = cached;
 		} else {
-			// Use your lib/tmdb search (v4 bearer) — language/en-US and include_adult=false baked in
-			[movieJson, tvJson] = await Promise.all([
-				searchTmdb(query, "MOVIE", page),
-				searchTmdb(query, "TV", page),
-			]);
-			comboCache.set(key, { movie: movieJson, tv: tvJson });
+			searchResults = await searchTmdbTitles(query);
+			searchCache.set(key, searchResults);
 		}
 
 		// Map to the lean shape
-		const movieResults: SearchResult[] = (movieJson.results ?? []).map((m: any) => ({
-			tmdbId: m.tmdbId,
-			type: titleTypeToAPI("MOVIE"),
-			name: m.name,
-			releaseDate: m.releaseDate ?? null,
-			year: m.releaseDate ? Number(String(m.releaseDate).slice(0, 4)) : null,
-			posterPath: m.posterPath ?? null,
+		const results: SearchResult[] = searchResults.results.map((r) => ({
+			...r,
+			year: r.releaseDate
+				? Number(r.releaseDate.slice(0, 4))
+				: null,
 			isInWatchlist: false,
-			overview: m.overview ?? null,
-			popularity: m.popularity ?? null,
 		}));
-
-		const tvResults: SearchResult[] = (tvJson.results ?? []).map((t: any) => ({
-			tmdbId: t.tmdbId,
-			type: titleTypeToAPI("TV"),
-			name: t.name,
-			releaseDate: t.releaseDate ?? null,
-			year: t.releaseDate ? Number(String(t.releaseDate).slice(0, 4)) : null,
-			posterPath: t.posterPath ?? null,
-			isInWatchlist: false,
-			overview: t.overview ?? null,
-			popularity: t.popularity ?? null,
-		}));
-
-		const combined = [...movieResults, ...tvResults];
 
 		// Watchlist flags
 		const keySet = await batchIsInWatchlist(
 			userId,
-			combined.map((r) => ({ tmdbId: r.tmdbId, type: r.type }))
+			results.map((r) => ({ tmdbId: r.tmdbId, type: r.type }))
 		);
-		for (const r of combined) {
+		for (const r of results) {
 			r.isInWatchlist = keySet.has(`${r.type}:${r.tmdbId}`);
 		}
 
 		const resp: SearchResponse = {
-			results: combined,
-			page,
-			// Combine meta sensibly: keep "max pages" & sum totals like before
-			totalPages: Math.max(movieJson.totalPages ?? 1, tvJson.totalPages ?? 1),
-			totalResults: (movieJson.totalResults ?? 0) + (tvJson.totalResults ?? 0),
+			results: results,
 		};
 		
 		res.json(resp);
