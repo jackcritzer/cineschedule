@@ -16,14 +16,11 @@ export type SearchResult = TmdbSearchResult & {
     isInWatchlist: boolean;
 };
 
-export type PaginatedResponse<T> = {
+type SearchResults<T> = {
     results: T[];
-    /* page: number;
-    totalPages: number;
-    totalResults: number; */
-};
+}
 
-export type TmdbSearchResponse = PaginatedResponse<TmdbSearchResult>;
+export type TmdbSearchResponse = SearchResults<TmdbSearchResult>;
 
 export type SearchResponse = {
     results: SearchResult[];

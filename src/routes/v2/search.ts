@@ -19,12 +19,7 @@ import { ApiTitleType, SearchResult, SearchResponse, TmdbSearchResponse } from "
 
 const router = Router();
 
-// 90s cache for combined movie+tv results by (query,page,region)
-const comboCache = new TTLCache<{
-	movie: any;
-	tv: any;
-}>(90 * 1000);
-
+// GET /v2/search?q=...&page=...&region=...
 const searchCache = new TTLCache<TmdbSearchResponse>(90 * 1000);
 
 async function batchIsInWatchlist(
@@ -68,7 +63,7 @@ router.get(
 		const { query, page, region } = getValidated<z.infer<typeof SearchQuerySchema>>(req, "query");
 
 		// Try cache
-		const key = comboCache.key(["q", query.trim(), "p", page, "r", region]);
+		const key = searchCache.key(["q", query.trim(), "p", page, "r", region]);
 		let searchResults;
 
 		const cached = searchCache.get(key);

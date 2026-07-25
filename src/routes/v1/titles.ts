@@ -6,7 +6,7 @@ import { prisma } from "../../db/client";
 import { validate, getValidated } from "../../middleware/validate";
 import { requireAuth } from "../../middleware/auth";
 import { asyncHandler } from "../../middleware/asyncHandler";
-import { fetchTmdbTitle, searchTmdb } from "../../lib/tmdb";
+import { fetchTmdbTitle } from "../../lib/tmdb";
 import { ApiError, badRequest, notFound } from "../../errors";
 import { refreshMaybe } from "../../services/refreshMaybe"; // <-- use your refresh service
 
@@ -14,16 +14,9 @@ const router = Router();
 
 const REFRESH_ON_ADD = (process.env.REFRESH_ON_ADD ?? "1") !== "0";
 
-// ---------- Schemas
 const titlesQuerySchema = z.object({
     limit: z.coerce.number().int().min(1).max(100).default(20),
     cursor: z.coerce.number().int().positive().optional()
-});
-
-const titlesSearchQuery = z.object({
-    q: z.string().min(1),
-    type: z.enum(["MOVIE", "TV"]).default("MOVIE"),
-    page: z.coerce.number().int().min(1).max(1000).default(1)
 });
 
 const tmdbSchema = z.object({
@@ -31,12 +24,9 @@ const tmdbSchema = z.object({
     type: z.enum(["MOVIE", "TV"])
 });
 
-// ---------- Helpers
 function toTitleType(t: "MOVIE" | "TV"): TitleType {
     return t === "MOVIE" ? "MOVIE" : "TV";
 }
-
-// ---------- Routes
 
 router.get(
     "/",
@@ -88,19 +78,6 @@ router.get(
     })
 );
 
-// Keep this for v1 users; newer FE can use /search (latest alias -> v2).
-router.get(
-    "/search",
-    requireAuth,
-    validate("query", titlesSearchQuery),
-    asyncHandler(async (req: any, res) => {
-        const { q, type, page } = getValidated<z.infer<typeof titlesSearchQuery>>(req, "query");
-        const data = await searchTmdb(q, type, page).catch(() => null);
-        if (!data) throw new ApiError(502, "TMDB_UPSTREAM_ERROR", "TMDB search failed");
-        res.json(data);
-    })
-);
-
 // Upsert Title from TMDB, then (optionally) refresh via refreshMaybe
 router.post(
     "/tmdb",
@@ -139,6 +116,37 @@ router.post(
         }
 
         res.status(201).json(title);
+    })
+);
+
+const refreshParams = z.object({
+    id: z.coerce.number().int().positive()
+});
+const refreshQuery = z.object({
+    force: z.coerce.boolean().optional()
+});
+
+
+router.post(
+    "/:id/refresh",
+    requireAuth,
+    validate("params", refreshParams),
+    validate("query", refreshQuery),
+    asyncHandler(async (req: any, res) => {
+        const { id } = getValidated<z.infer<typeof refreshParams>>(req, "params");
+        const { force } = getValidated<z.infer<typeof refreshQuery>>(req, "query");
+
+        const title = await prisma.title.findUnique({ where: { id } });
+        if (!title) throw notFound("Title not found");
+
+        const result = await refreshMaybe(title, {
+            force: Boolean(force),
+            reason: force ? "manual-force" : "manual",
+        }).catch((err) => {
+            throw new ApiError(502, "UPSTREAM_ERROR", (err as Error).message ?? "Refresh failed");
+        });
+
+        return res.json({ ok: true, result });
     })
 );
 

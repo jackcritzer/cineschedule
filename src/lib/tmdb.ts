@@ -138,42 +138,6 @@ export async function fetchTmdbTitle(tmdbId: number, type: ApiTitleType): Promis
 	};
 };
 
-/**
- *
- */
-export async function searchTmdb(query: string, type: ApiTitleType, page = 1): Promise<TmdbSearchResponse> {
-    const endpoint = type === "MOVIE" ? "/search/movie" : "/search/tv";
-
-    const json: any = await tmdbGet(endpoint, {
-        language: "en-US",
-        include_adult: "false",
-        page,
-        query: query.trim(),
-    });
-
-    const results: TmdbSearchResult[] = (json.results ?? []).map((r: any) => {
-		const name = type === "MOVIE" ? r.title : r.name;
-		const dateStr = type === "MOVIE" ? r.release_date : r.first_air_date;
-
-		return {
-			tmdbId: r.id as number,
-			type,
-			name,
-			releaseDate: dateStr || null,
-			posterPath: r.poster_path ?? null,
-			overview: r.overview ?? null,
-			popularity: r.popularity ?? null,
-		} as TmdbSearchResult;
-	});
-
-	return {
-			page: json.page ?? page,
-			totalPages: json.total_pages ?? 1,
-			totalResults: json.total_results ?? results.length,
-			results,
-  	} as TmdbSearchResponse;
-}
-
 export async function searchTmdbTitles(
 	query: string,
 	page = 1
