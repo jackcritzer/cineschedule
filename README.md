@@ -1,111 +1,121 @@
-# 🎬 CineSchedule
+# CineSchedule
 
-CineSchedule is a backend API that tracks upcoming release dates for movies and TV shows.  
-Users can add titles to a personal watchlist and view a merged calendar of upcoming theatrical, digital, and streaming events.
+CineSchedule is a backend API for tracking upcoming movie and television release dates. Users can maintain personal watchlists and query a unified calendar of theatrical, digital, streaming, and episode releases.
 
----
+The project is designed around a practical data problem: release information changes over time and arrives from an external source, so the application has to keep local data current without making every user request depend on TMDB.
 
-## 🚀 Tech Stack
-- **Backend**: Node.js + Express (TypeScript)
-- **Database**: PostgreSQL (via Prisma ORM)
-- **Auth**: JWT (access token only)
-- **Infrastructure**: Docker + docker-compose
-- **Background jobs**: `node-cron` (nightly TMDB refresh)
-- **Deployment**: Render (Web Service + Postgres)
-- **External API**: [TMDB](https://www.themoviedb.org/documentation/api)
+## Features
 
----
+- User registration and login with JWT authentication
+- Protected watchlist routes
+- TMDB title search and detail ingestion
+- Personal watchlist management
+- Unified calendar across release events and episodes
+- Cursor-based pagination
+- Nightly TMDB refresh with bounded concurrency
+- Request validation with Zod
+- PostgreSQL persistence through Prisma
+- Automated tests and GitHub Actions CI/CD
+- Docker-based local and production workflows
 
-## ⚡ Features
-- User registration & login (JWT authentication middleware)
-- Add TMDB titles to a personal watchlist
-- Query watchlist items
-- Calendar endpoint merging release events & episodes
-- Nightly background job refreshing release data from TMDB
-- Render CI/CD pipeline with image builds & deploys
-- Custom domain: [https://www.cineschedule.com](https://www.cineschedule.com) (SSL enabled)
+## Architecture
 
----
+```text
+Client
+  |
+Express API
+  |-- authentication and validation
+  |-- titles and watchlists
+  |-- calendar queries
+  |
+PostgreSQL / Prisma
+  ^
+  |
+Nightly refresh service <---- TMDB API
+```
 
-## 🛠️ Local Development
+The API stores the title and release data needed by the product, then refreshes tracked titles in the background. This separates interactive requests from external synchronization and keeps calendar queries fast and predictable.
 
-### Prerequisites
+## Tech stack
+
+- TypeScript
+- Node.js and Express
+- PostgreSQL and Prisma
+- Zod
+- JWT authentication
+- TMDB API
+- Docker and Docker Compose
+- GitHub Actions
+- Render
+
+## Frontend
+
+The Next.js client lives in a separate repository:
+
+[github.com/jackcritzer/cineschedule-web](https://github.com/jackcritzer/cineschedule-web)
+
+## Local development
+
+### Requirements
+
 - Node.js 20+
-- Docker & Docker Compose
+- Docker and Docker Compose
 - TMDB API key
 
 ### Setup
+
 ```bash
-# Clone the repo
-git clone https://github.com/cineschedule/cineschedule.git
+git clone https://github.com/jackcritzer/cineschedule.git
 cd cineschedule
-
-# Install dependencies
 npm install
-
-# Start services
 docker compose up -d
-
-# Run database migrations
 npm run migrate
 ```
 
-### Environment Variables
-Create a `.env` file (or use Render Dashboard). Required variables:
+Create a `.env` file:
 
 ```env
 DATABASE_URL=postgresql://user:password@localhost:5432/cineschedule
 JWT_SECRET=your-secret
 TMDB_API_KEY=your-tmdb-key
-CRON_SCHEDULE=0 0 * * *   # nightly refresh at midnight UTC
-CORS_ORIGIN=https://www.cineschedule.com
+CRON_SCHEDULE=0 0 * * *
+CORS_ORIGIN=http://localhost:3001
 ```
 
----
+Start the API using the scripts defined in `package.json`.
 
-## 🔄 Background Jobs
-A nightly cron job runs `refreshNightly` to sync data from TMDB.  
-To test locally, you can temporarily set a fast schedule (e.g. `*/10 * * * * *` for every 10 seconds).
+## Main API areas
 
----
+- `/auth` — registration and login
+- `/search` — TMDB-backed title search
+- `/watchlist` — authenticated watchlist management
+- `/calendar` — upcoming release and episode queries
+- `/health` — service health check
 
-## 📦 Deployment
+## Background refresh
 
-1. Push to `main` → GitHub Actions builds & pushes Docker image to GHCR.  
-2. Render Web Service pulls the image and deploys automatically.  
-3. Database migrations are applied on startup.  
-4. Nightly job runs inside the Render service.
+A scheduled job refreshes stored title data from TMDB each night. The refresh limits concurrent requests so it can process multiple titles efficiently without sending an uncontrolled burst to the external API.
 
----
+## Deployment
 
-## 🔒 Security
-- JWT auth for protected routes
-- Configurable CORS via `CORS_ORIGIN`
-- Planned: secret rotation for JWTs
+1. Changes pushed to `main` run through GitHub Actions.
+2. The application is built as a Docker image.
+3. Render deploys the service and PostgreSQL database.
+4. Database migrations run during startup.
+5. The scheduled refresh runs within the deployed service.
 
----
-
-## ✅ Smoke Tests
-After deploy, verify the following endpoints:
+## Smoke checks
 
 ```bash
-# Health check
 curl https://www.cineschedule.com/health
-
-# Register
-curl -X POST https://www.cineschedule.com/auth/register   -H "Content-Type: application/json"   -d '{"email":"test@example.com","password":"password"}'
-
-# Login
-curl -X POST https://www.cineschedule.com/auth/login   -H "Content-Type: application/json"   -d '{"email":"test@example.com","password":"password"}'
-
-# Watchlist
-curl -H "Authorization: Bearer <token>" https://www.cineschedule.com/watchlist
-
-# Calendar
-curl -H "Authorization: Bearer <token>" https://www.cineschedule.com/calendar
 ```
 
----
+Authenticated routes can then be exercised by registering, logging in, and sending the returned bearer token to the watchlist and calendar endpoints.
 
-## 📖 License
+## Engineering focus
+
+CineSchedule demonstrates API design, relational data modeling, external-service integration, background synchronization, authentication, pagination, deployment, and testing in a production-style TypeScript backend.
+
+## License
+
 MIT
